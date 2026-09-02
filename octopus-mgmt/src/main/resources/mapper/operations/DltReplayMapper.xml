@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.operations.DltReplayMapper">
+    <insert id="insert">
+        INSERT INTO kafka_dlt_replay_job
+            (id, actor_account_id, actor_session_id, source_dlt_topic, source_partition, source_offset,
+             source_timestamp, source_key_sha256, payload_size, destination_topic, replay_attempt,
+             replay_root, reason, status, created_at)
+        VALUES
+            (#{id}, #{actorAccountId}, #{actorSessionId}, #{sourceDltTopic}, #{sourcePartition}, #{sourceOffset},
+             #{sourceTimestamp}, #{sourceKeySha256}, #{payloadSize}, #{destinationTopic}, #{replayAttempt},
+             #{replayRoot}, #{reason}, 'PENDING', #{createdAt})
+    </insert>
+
+    <insert id="insertRequestedAudit">
+        INSERT INTO security_audit_event
+            (id, tenant_id, actor_account_id, session_id, event_type, resource_type, resource_id,
+             outcome, reason, occurred_at, details)
+        VALUES
+            (#{auditId}, NULL, #{actorAccountId}, #{actorSessionId}, 'KAFKA_DLT_REPLAY_REQUESTED',
+             'kafka_dlt_replay_job', #{jobId}, 'PENDING', #{reason}, #{occurredAt},
+             jsonb_build_object('sourceDltTopic', #{sourceDltTopic}, 'sourcePartition', #{sourcePartition},
+                                'sourceOffset', #{sourceOffset}, 'destinationTopic', #{destinationTopic},
+                                'replayAttempt', #{replayAttempt}, 'replayRoot', #{replayRoot}))
+    </insert>
+
+    <update id="markSucceeded">
+        UPDATE kafka_dlt_replay_job
+           SET status = 'SUCCEEDED', destination_partition = #{destinationPartition},
+               destination_offset = #{destinationOffset}, destination_timestamp = #{destinationTimestamp},
+               completed_at = #{completedAt}
+         WHERE id = #{jobId} AND status = 'PENDING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE kafka_dlt_replay_job
+           SET status = 'FAILED', failure_reason = #{failureReason}, completed_at = #{completedAt}
+         WHERE id = #{jobId} AND status = 'PENDING'
+    </update>
+
+    <insert id="insertOutcomeAudit">
+        INSERT INTO security_audit_event
+            (id, tenant_id, actor_account_id, session_id, event_type, resource_type, resource_id,
+             outcome, reason, occurred_at, details)
+        SELECT #{auditId}, NULL, actor_account_id, actor_session_id, #{eventType},
+               'kafka_dlt_replay_job', id, #{outcome}, reason, #{occurredAt},
+               jsonb_strip_nulls(jsonb_build_object('failureReason', #{failureReason},
+                    'destinationPartition', #{destinationPartition}, 'destinationOffset', #{destinationOffset}))
+          FROM kafka_dlt_replay_job WHERE id = #{jobId}
+    </insert>
+
+    <select id="find" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.operations.DltReplayMapper$ReplayRow">
+        SELECT id, actor_account_id, actor_session_id, source_dlt_topic, source_partition, source_offset,
+               source_timestamp, source_key_sha256, payload_size, destination_topic, replay_attempt,
+               replay_root, reason, status, destination_partition, destination_offset,
+               destination_timestamp, failure_reason, created_at, completed_at
+          FROM kafka_dlt_replay_job WHERE id = #{jobId}
+    </select>
+</mapper>

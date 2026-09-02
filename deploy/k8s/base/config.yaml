@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: octopus-config
+  namespace: octopus
+data:
+  OCTOPUS_ENVIRONMENT: production
+  OCTOPUS_KAFKA_BOOTSTRAP_SERVERS: kafka.kafka.svc.cluster.local:9092
+  OCTOPUS_REDIS_HOST: redis.redis.svc.cluster.local
+  OCTOPUS_REDIS_PORT: "6379"
+  OCTOPUS_INFLUX_URL: http://influxdb.influxdb.svc.cluster.local:8086
+  OCTOPUS_INFLUX_ORG: octopus
+  OCTOPUS_INFLUX_BUCKET: octopus-telemetry
+  OCTOPUS_STORAGE_TYPE: s3
+  OCTOPUS_STORAGE_S3_BUCKET: octopus-production-artifacts
+  OCTOPUS_STORAGE_S3_REGION: us-east-1
+  OCTOPUS_STORAGE_S3_PREFIX: objects
+  OCTOPUS_STORAGE_S3_PATH_STYLE: "false"
+  OCTOPUS_STORAGE_S3_ENCRYPTION: S3_MANAGED
+  OCTOPUS_TELEMETRY_RAW_TOPIC: octopus.production.telemetry.raw.v1
+  OCTOPUS_TELEMETRY_NORMALIZED_TOPIC: octopus.production.telemetry.normalized.v1
+  OCTOPUS_ALARM_GROUP: octopus-mgmt-alarm-v1
+  OCTOPUS_METER_CONFIGURATION_TOPIC: octopus.production.catalog.meter-configuration.v1
+  OCTOPUS_TELEMETRY_QUARANTINE_TOPIC: octopus.production.telemetry.quarantine.v1
+  OCTOPUS_COMMAND_REQUESTED_TOPIC: octopus.production.command.requested.v1
+  OCTOPUS_COMMAND_STATUS_TOPIC: octopus.production.command.status.v1
+  OCTOPUS_COMMAND_DISPATCH_GROUP: octopus-control-command-v1
+  OCTOPUS_COMMAND_STATUS_GROUP: octopus-mgmt-command-status-v1
+  OCTOPUS_COMMAND_DISPATCH_ENABLED: "false"
+  OCTOPUS_SHADOW_REPORTED_TOPIC: octopus.production.shadow.reported.v1
+  OCTOPUS_SHADOW_QUARANTINE_TOPIC: octopus.production.shadow.quarantine.v1
+  OCTOPUS_SHADOW_PROJECTION_GROUP: octopus-mgmt-shadow-v1
+  OCTOPUS_DEVICE_PRESENCE_LEASE_DURATION: PT2M
+  OCTOPUS_MQTT_ENABLED: "false"
+  OCTOPUS_MQTT_HOST: mqtt.example.internal
+  OCTOPUS_MQTT_PORT: "8883"
+  OCTOPUS_MQTT_TLS_ENABLED: "true"
+  OCTOPUS_MQTT_KEY_STORE: /run/secrets/octopus-mqtt/client.p12
+  OCTOPUS_MQTT_TRUST_STORE: /run/secrets/octopus-mqtt/truststore.p12
+  OCTOPUS_MQTT_PERSISTENCE_DIRECTORY: /tmp/octopus-mqtt
+  OCTOPUS_MQTT_COMMAND_RESULT_TOPIC_FILTER: $share/octopus-control/octopus/+/devices/+/command-results/+
+  OCTOPUS_MQTT_SHADOW_REPORTED_TOPIC_FILTER: $share/octopus-control/octopus/+/devices/+/shadow/reported
+  OCTOPUS_JWK_SET_URI: http://octopus-mgmt.octopus.svc.cluster.local/oauth2/jwks
+  OCTOPUS_CA_SIGNING_MODE: disabled
+  OCTOPUS_CA_SIGNING_KEY_STORE: /run/secrets/octopus-ca/issuing-ca.p12

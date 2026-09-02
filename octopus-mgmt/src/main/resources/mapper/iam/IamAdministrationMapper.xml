@@ -1,0 +1,348 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper">
+    <select id="countAccountIdentity" resultType="long">
+        SELECT count(*) FROM account
+         WHERE lower(login_name) = lower(#{loginName})
+            OR (#{email} IS NOT NULL AND lower(email) = lower(#{email}))
+    </select>
+
+    <insert id="insertAccount">
+        INSERT INTO account (id, login_name, email, phone_e164, password_hash, password_algorithm,
+            status, session_generation, authorization_generation, password_changed_at, created_at, updated_at)
+        VALUES (#{account.id}, #{account.loginName}, #{account.email}, #{account.phoneE164},
+            #{account.passwordHash}, 'ARGON2ID', #{account.status}, 0, 0,
+            #{account.passwordChangedAt}, #{account.createdAt}, #{account.updatedAt})
+    </insert>
+
+    <select id="findAccountSecurity" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$AccountSecurityRow">
+        SELECT id AS account_id, password_hash, status, session_generation FROM account WHERE id = #{accountId}
+    </select>
+
+    <update id="updatePassword">
+        UPDATE account
+           SET password_hash = #{passwordHash}, password_algorithm = 'ARGON2ID',
+               password_changed_at = #{now},
+               session_generation = GREATEST(session_generation, #{sessionGeneration}),
+               updated_at = #{now}
+         WHERE id = #{accountId}
+    </update>
+
+    <insert id="insertPasswordAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, NULL, #{actorAccountId}, #{sessionId}, #{eventType},
+                'account', #{accountId}, 'SUCCESS', #{reason}, #{now},
+                jsonb_build_object('sessionGeneration', #{sessionGeneration}))
+    </insert>
+
+    <update id="updateAccountStatus">
+        UPDATE account
+           SET status = #{status},
+               session_generation = GREATEST(session_generation, #{sessionGeneration}),
+               updated_at = #{now}
+         WHERE id = #{accountId}
+    </update>
+
+    <insert id="insertAccountStatusAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, NULL, #{actorAccountId}, #{sessionId}, 'ACCOUNT_STATUS_CHANGED',
+                'account', #{accountId}, 'SUCCESS', #{reason}, #{now},
+                jsonb_build_object('previousStatus', #{previousStatus}, 'status', #{status},
+                                   'sessionGeneration', #{sessionGeneration}))
+    </insert>
+
+    <select id="findOrganization" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$OrganizationRow">
+        SELECT id AS organization_id, path FROM organization
+         WHERE id = #{organizationId} AND status = 'ACTIVE'
+    </select>
+
+    <select id="countMembership" resultType="long">
+        SELECT count(*) FROM account_membership
+         WHERE account_id = #{accountId} AND organization_id = #{organizationId}
+    </select>
+
+    <insert id="insertMembership">
+        INSERT INTO account_membership (id, tenant_id, organization_id, account_id, status, created_at, updated_at)
+        SELECT #{id}, #{tenantId}, #{organizationId}, account.id, 'ACTIVE', #{now}, #{now}
+          FROM account WHERE account.id = #{accountId} AND account.status = 'ACTIVE'
+    </insert>
+
+    <insert id="initializeTenantSecurity">
+        INSERT INTO account_tenant_security_state (tenant_id, account_id, authorization_generation, updated_at)
+        VALUES (#{tenantId}, #{accountId}, 0, #{now})
+        ON CONFLICT (tenant_id, account_id) DO NOTHING
+    </insert>
+
+    <select id="countRoleCode" resultType="long">
+        SELECT count(*) FROM role WHERE code = #{code} AND status = 'ACTIVE'
+    </select>
+
+    <select id="findTenantAssignablePermissions" resultType="string">
+        SELECT code FROM permission WHERE tenant_assignable AND code IN
+        <foreach collection="codes" item="code" open="(" separator="," close=")">#{code}</foreach>
+    </select>
+
+    <select id="listTenantAssignablePermissions" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$PermissionRow">
+        SELECT code, resource_type, action, description
+          FROM permission
+         WHERE tenant_assignable
+         ORDER BY resource_type, action, code
+    </select>
+
+    <select id="listActiveMenus" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$MenuRow">
+        SELECT id, parent_id, code, route, required_permission_code, sort_order
+          FROM menu
+         WHERE status = 'ACTIVE'
+         ORDER BY sort_order, code
+    </select>
+
+    <insert id="insertRole">
+        INSERT INTO role (id, tenant_id, organization_id, code, display_name, role_type,
+                          status, version, created_at, updated_at)
+        VALUES (#{id}, #{tenantId}, #{organizationId}, #{code}, #{displayName}, #{roleType},
+                'ACTIVE', 0, #{now}, #{now})
+    </insert>
+
+    <insert id="insertRolePermission">
+        INSERT INTO role_permission (tenant_id, role_id, permission_id, created_at)
+        SELECT #{tenantId}, #{roleId}, id, #{now} FROM permission
+         WHERE code = #{permissionCode} AND tenant_assignable
+    </insert>
+
+    <select id="findMembership" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$MembershipRow">
+        SELECT membership.id AS membership_id, membership.account_id, membership.organization_id,
+               organization.path AS organization_path, state.authorization_generation
+          FROM account_membership membership
+          JOIN organization ON organization.id = membership.organization_id
+                           AND organization.tenant_id = membership.tenant_id
+          JOIN account_tenant_security_state state ON state.tenant_id = membership.tenant_id
+                                                  AND state.account_id = membership.account_id
+         WHERE membership.id = #{membershipId} AND membership.status = 'ACTIVE'
+    </select>
+
+    <select id="findMembershipLifecycle" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$MembershipLifecycleRow">
+        SELECT membership.id AS membership_id, membership.account_id, membership.organization_id,
+               organization.path AS organization_path, membership.status,
+               state.authorization_generation
+          FROM account_membership membership
+          JOIN organization ON organization.id = membership.organization_id
+                           AND organization.tenant_id = membership.tenant_id
+          JOIN account_tenant_security_state state ON state.tenant_id = membership.tenant_id
+                                                  AND state.account_id = membership.account_id
+         WHERE membership.id = #{membershipId}
+    </select>
+
+    <select id="findRole" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$RoleRow">
+        SELECT id AS role_id, organization_id, role_type FROM role
+         WHERE id = #{roleId} AND status = 'ACTIVE' AND role_type &lt;&gt; 'PLATFORM_ADMIN'
+    </select>
+
+    <select id="findRolePermissions" resultType="string">
+        SELECT permission.code
+          FROM role_permission assignment
+          JOIN permission ON permission.id = assignment.permission_id
+         WHERE assignment.role_id = #{roleId} AND permission.tenant_assignable
+         ORDER BY permission.code
+    </select>
+
+    <select id="findActiveRoleMemberships" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$MembershipRow">
+        SELECT membership.id AS membership_id, membership.account_id, membership.organization_id,
+               organization.path AS organization_path, state.authorization_generation
+          FROM membership_role assignment
+          JOIN account_membership membership ON membership.id = assignment.membership_id
+                                            AND membership.tenant_id = assignment.tenant_id
+                                            AND membership.status = 'ACTIVE'
+          JOIN organization ON organization.id = membership.organization_id
+                           AND organization.tenant_id = membership.tenant_id
+          JOIN account_tenant_security_state state ON state.tenant_id = membership.tenant_id
+                                                  AND state.account_id = membership.account_id
+         WHERE assignment.role_id = #{roleId}
+         ORDER BY membership.account_id
+    </select>
+
+    <select id="listRoles" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$RoleViewRow">
+        SELECT role.id AS role_id, role.organization_id, role.code, role.display_name,
+               role.role_type, role.status, role.version,
+               COALESCE(string_agg(permission.code, ',' ORDER BY permission.code), '') AS permission_codes
+          FROM role
+          LEFT JOIN role_permission assignment ON assignment.role_id = role.id
+          LEFT JOIN permission ON permission.id = assignment.permission_id
+         WHERE role.organization_id = #{organizationId} AND role.role_type &lt;&gt; 'PLATFORM_ADMIN'
+         GROUP BY role.id, role.organization_id, role.code, role.display_name,
+                  role.role_type, role.status, role.version
+         ORDER BY role.code, role.id
+    </select>
+
+    <select id="listMemberships" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$MembershipViewRow">
+        SELECT membership.id AS membership_id, membership.account_id, membership.organization_id,
+               organization.path AS organization_path, account.login_name, account.email,
+               membership.status,
+               COALESCE(string_agg(assignment.role_id::text, ',' ORDER BY assignment.role_id::text), '') AS role_ids
+          FROM account_membership membership
+          JOIN organization ON organization.id = membership.organization_id
+                           AND organization.tenant_id = membership.tenant_id
+          JOIN account ON account.id = membership.account_id
+          LEFT JOIN membership_role assignment ON assignment.membership_id = membership.id
+                                              AND assignment.tenant_id = membership.tenant_id
+         WHERE membership.organization_id = #{organizationId}
+         GROUP BY membership.id, membership.account_id, membership.organization_id,
+                  organization.path, account.login_name, account.email, membership.status
+         ORDER BY account.login_name, membership.id
+    </select>
+
+    <select id="countAssignment" resultType="long">
+        SELECT count(*) FROM membership_role WHERE membership_id = #{membershipId} AND role_id = #{roleId}
+    </select>
+
+    <insert id="insertAssignment">
+        INSERT INTO membership_role (tenant_id, membership_id, role_id, created_at)
+        VALUES (#{tenantId}, #{membershipId}, #{roleId}, #{now})
+    </insert>
+
+    <delete id="deleteAssignment">
+        DELETE FROM membership_role
+         WHERE tenant_id = #{tenantId} AND membership_id = #{membershipId} AND role_id = #{roleId}
+    </delete>
+
+    <update id="suspendMembership">
+        UPDATE account_membership
+           SET status = 'SUSPENDED', updated_at = #{now}
+         WHERE tenant_id = #{tenantId} AND id = #{membershipId} AND status = 'ACTIVE'
+    </update>
+
+    <update id="activateMembership">
+        UPDATE account_membership
+           SET status = 'ACTIVE', updated_at = #{now}
+         WHERE tenant_id = #{tenantId} AND id = #{membershipId} AND status = 'SUSPENDED'
+    </update>
+
+    <update id="advanceAuthorizationGeneration">
+        UPDATE account_tenant_security_state
+           SET authorization_generation = GREATEST(authorization_generation, #{generation}), updated_at = #{now}
+         WHERE tenant_id = #{tenantId} AND account_id = #{accountId}
+    </update>
+
+    <insert id="insertMembershipRoleAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, #{tenantId}, #{actorAccountId}, #{sessionId}, 'MEMBERSHIP_ROLE_REVOKED',
+                'membership_role', #{membershipId}, 'SUCCESS', #{reason}, #{now},
+                jsonb_build_object('membershipId', #{membershipId}::text,
+                                   'roleId', #{roleId}::text,
+                                   'accountId', #{accountId}::text))
+    </insert>
+
+    <insert id="insertMembershipAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, #{tenantId}, #{actorAccountId}, #{sessionId}, #{eventType},
+                'account_membership', #{membershipId}, 'SUCCESS', #{reason}, #{now},
+                jsonb_build_object('membershipId', #{membershipId}::text,
+                                   'accountId', #{accountId}::text,
+                                   'organizationId', #{organizationId}::text))
+    </insert>
+
+    <delete id="deleteRolePermissions">
+        DELETE FROM role_permission WHERE tenant_id = #{tenantId} AND role_id = #{roleId}
+    </delete>
+
+    <update id="touchRole">
+        UPDATE role SET version = version + 1, updated_at = #{now}
+         WHERE tenant_id = #{tenantId} AND id = #{roleId} AND status = 'ACTIVE'
+    </update>
+
+    <update id="retireRole">
+        UPDATE role SET status = 'RETIRED', version = version + 1, updated_at = #{now}
+         WHERE tenant_id = #{tenantId} AND id = #{roleId} AND status = 'ACTIVE'
+    </update>
+
+    <insert id="insertRoleAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, #{tenantId}, #{actorAccountId}, #{sessionId}, #{eventType},
+                'role', #{roleId}, 'SUCCESS', #{reason}, #{now},
+                jsonb_build_object('affectedAccountCount', #{affectedAccountCount},
+                                   'permissionCodes', CASE WHEN #{permissionCodes} = '' THEN '[]'::jsonb
+                                       ELSE to_jsonb(string_to_array(#{permissionCodes}, ',')) END))
+    </insert>
+
+    <select id="findDeviceGrantTarget" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$GrantTargetRow">
+        SELECT device.organization_id, organization.path AS organization_path
+          FROM device
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = device.tenant_id
+         WHERE device.id = #{resourceId} AND device.status = 'ACTIVE'
+    </select>
+
+    <select id="findFacilityGrantTarget" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$GrantTargetRow">
+        SELECT facility.organization_id, organization.path AS organization_path
+          FROM facility
+          JOIN organization ON organization.id = facility.organization_id
+                           AND organization.tenant_id = facility.tenant_id
+         WHERE facility.id = #{resourceId} AND facility.status = 'ACTIVE'
+    </select>
+
+    <select id="findMeterGrantTarget" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$GrantTargetRow">
+        SELECT device.organization_id, organization.path AS organization_path
+          FROM meter
+          JOIN device ON device.id = meter.device_id AND device.tenant_id = meter.tenant_id
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = device.tenant_id
+         WHERE meter.id = #{resourceId} AND meter.status = 'ACTIVE' AND device.status = 'ACTIVE'
+    </select>
+
+    <select id="findActiveResourceGrant" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$GrantRow">
+        SELECT id, tenant_id, membership_id, resource_type, resource_id, action,
+               created_by_account_id, created_at, revoked_by_account_id, revoked_at, revoke_reason
+          FROM resource_grant
+         WHERE id = #{grantId} AND effect = 'ALLOW' AND revoked_at IS NULL
+    </select>
+
+    <select id="findActiveResourceGrantByKey" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$GrantRow">
+        SELECT id, tenant_id, membership_id, resource_type, resource_id, action,
+               created_by_account_id, created_at, revoked_by_account_id, revoked_at, revoke_reason
+          FROM resource_grant
+         WHERE membership_id = #{membershipId} AND resource_type = #{resourceType}
+           AND resource_id = #{resourceId} AND action = #{action}
+           AND effect = 'ALLOW' AND revoked_at IS NULL
+    </select>
+
+    <select id="listActiveResourceGrants" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.iam.IamAdministrationMapper$GrantRow">
+        SELECT id, tenant_id, membership_id, resource_type, resource_id, action,
+               created_by_account_id, created_at, revoked_by_account_id, revoked_at, revoke_reason
+          FROM resource_grant
+         WHERE membership_id = #{membershipId} AND effect = 'ALLOW' AND revoked_at IS NULL
+         ORDER BY created_at, id
+    </select>
+
+    <insert id="upsertResourceGrant">
+        INSERT INTO resource_grant (id, tenant_id, membership_id, resource_type, resource_id,
+                                    action, effect, created_by_account_id, created_at,
+                                    revoked_by_account_id, revoked_at, revoke_reason)
+        VALUES (#{id}, #{tenantId}, #{membershipId}, #{resourceType}, #{resourceId},
+                #{action}, 'ALLOW', #{actorAccountId}, #{now}, NULL, NULL, NULL)
+        ON CONFLICT (tenant_id, membership_id, resource_type, resource_id, action)
+        DO UPDATE SET effect = 'ALLOW', created_by_account_id = EXCLUDED.created_by_account_id,
+                      created_at = EXCLUDED.created_at, revoked_by_account_id = NULL,
+                      revoked_at = NULL, revoke_reason = NULL
+    </insert>
+
+    <update id="revokeResourceGrant">
+        UPDATE resource_grant
+           SET revoked_by_account_id = #{actorAccountId}, revoked_at = #{now}, revoke_reason = #{reason}
+         WHERE id = #{grantId} AND effect = 'ALLOW' AND revoked_at IS NULL
+    </update>
+
+    <insert id="insertResourceGrantAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, #{tenantId}, #{actorAccountId}, #{sessionId}, #{eventType},
+                'resource_grant', #{grantId}, 'SUCCESS', #{reason}, #{now},
+                jsonb_build_object('membershipId', #{membershipId}::text,
+                                   'targetResourceType', #{resourceType},
+                                   'targetResourceId', #{targetResourceId}::text,
+                                   'action', #{action}))
+    </insert>
+</mapper>

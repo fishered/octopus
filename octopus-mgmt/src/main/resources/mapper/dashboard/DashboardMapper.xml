@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.dashboard.DashboardMapper">
+    <select id="countCode" resultType="long">
+        SELECT count(*) FROM dashboard WHERE code = #{code}
+    </select>
+
+    <select id="findOrganizationContext" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.dashboard.DashboardMapper$OrganizationContextRow">
+        SELECT organization.tenant_id, organization.path AS organization_path,
+               COALESCE(organization.zone_id, tenant.default_zone_id) AS effective_zone_id
+          FROM organization
+          JOIN tenant ON tenant.id = organization.tenant_id
+         WHERE organization.id = #{organizationId}
+           AND organization.status = 'ACTIVE'
+           AND tenant.status = 'ACTIVE'
+    </select>
+
+    <insert id="insertDashboard">
+        INSERT INTO dashboard(id, tenant_id, organization_id, owner_account_id, code, display_name,
+                              description, default_zone_id, status, version, created_at, updated_at)
+        VALUES (#{dashboard.id}, #{dashboard.tenantId}, #{dashboard.organizationId},
+                #{dashboard.ownerAccountId}, #{dashboard.code}, #{dashboard.displayName},
+                #{dashboard.description}, #{dashboard.defaultZoneId}, #{dashboard.status},
+                #{dashboard.version}, #{dashboard.createdAt}, #{dashboard.updatedAt})
+    </insert>
+
+    <select id="findDashboard" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.dashboard.DashboardMapper$DashboardRow">
+        SELECT dashboard.id, dashboard.tenant_id, dashboard.organization_id, dashboard.owner_account_id,
+               dashboard.code, dashboard.display_name, dashboard.description, dashboard.default_zone_id,
+               dashboard.status, dashboard.version, dashboard.created_at, dashboard.updated_at,
+               organization.path AS organization_path
+          FROM dashboard
+          JOIN organization ON organization.id = dashboard.organization_id
+                           AND organization.tenant_id = dashboard.tenant_id
+         WHERE dashboard.id = #{dashboardId}
+    </select>
+
+    <select id="findDashboardsByOrganizationPath" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.dashboard.DashboardMapper$DashboardRow">
+        SELECT dashboard.id, dashboard.tenant_id, dashboard.organization_id, dashboard.owner_account_id,
+               dashboard.code, dashboard.display_name, dashboard.description, dashboard.default_zone_id,
+               dashboard.status, dashboard.version, dashboard.created_at, dashboard.updated_at,
+               organization.path AS organization_path
+          FROM dashboard
+          JOIN organization ON organization.id = dashboard.organization_id
+                           AND organization.tenant_id = dashboard.tenant_id
+         WHERE (organization.path = #{organizationPath}
+                OR organization.path LIKE CONCAT(#{organizationPath}, '/%'))
+           AND (#{includeArchived} OR dashboard.status = 'ACTIVE')
+         ORDER BY dashboard.updated_at DESC, dashboard.id
+         LIMIT #{limit}
+    </select>
+
+    <select id="findWidgets" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.dashboard.DashboardMapper$WidgetRow">
+        SELECT id, meter_id, title, visualization, value_field, aggregation, bucket_seconds,
+               layout::text AS layout_json, sort_order, created_at, updated_at
+          FROM dashboard_widget
+         WHERE dashboard_id = #{dashboardId}
+         ORDER BY sort_order, id
+    </select>
+
+    <update id="updateDashboard">
+        UPDATE dashboard
+           SET display_name = #{dashboard.displayName}, description = #{dashboard.description},
+               default_zone_id = #{dashboard.defaultZoneId}, status = #{dashboard.status},
+               version = #{dashboard.version}, updated_at = #{dashboard.updatedAt}
+         WHERE id = #{dashboard.id}
+           AND version = #{expectedVersion}
+    </update>
+
+    <update id="updateDashboardVersion">
+        UPDATE dashboard
+           SET version = #{newVersion}, updated_at = #{updatedAt}
+         WHERE id = #{dashboardId}
+           AND version = #{expectedVersion}
+           AND status = 'ACTIVE'
+    </update>
+
+    <insert id="insertWidget">
+        INSERT INTO dashboard_widget(id, tenant_id, dashboard_id, meter_id, title, visualization,
+                                     value_field, aggregation, bucket_seconds, layout, sort_order,
+                                     created_at, updated_at)
+        VALUES (#{widget.id}, #{widget.tenantId}, #{widget.dashboardId}, #{widget.meterId},
+                #{widget.title}, #{widget.visualization}, #{widget.valueField}, #{widget.aggregation},
+                #{widget.bucketSeconds}, CAST(#{widget.layoutJson} AS jsonb), #{widget.sortOrder},
+                #{widget.createdAt}, #{widget.updatedAt})
+    </insert>
+
+    <update id="updateWidget">
+        UPDATE dashboard_widget
+           SET meter_id = #{widget.meterId}, title = #{widget.title},
+               visualization = #{widget.visualization}, value_field = #{widget.valueField},
+               aggregation = #{widget.aggregation}, bucket_seconds = #{widget.bucketSeconds},
+               layout = CAST(#{widget.layoutJson} AS jsonb), sort_order = #{widget.sortOrder},
+               updated_at = #{widget.updatedAt}
+         WHERE id = #{widget.id}
+           AND dashboard_id = #{widget.dashboardId}
+    </update>
+
+    <delete id="deleteWidget">
+        DELETE FROM dashboard_widget
+         WHERE id = #{widgetId}
+           AND dashboard_id = #{dashboardId}
+    </delete>
+</mapper>

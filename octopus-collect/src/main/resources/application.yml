@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: octopus-collect
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  kafka:
+    bootstrap-servers: ${OCTOPUS_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      enable-auto-commit: false
+      isolation-level: read_committed
+      auto-offset-reset: earliest
+      max-poll-records: 20
+      properties:
+        allow.auto.create.topics: false
+        max.poll.interval.ms: 900000
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    listener:
+      ack-mode: manual_immediate
+      concurrency: ${OCTOPUS_COLLECT_CONCURRENCY:1}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 120000
+  data:
+    redis:
+      host: ${OCTOPUS_REDIS_HOST:localhost}
+      port: ${OCTOPUS_REDIS_PORT:6379}
+      password: ${OCTOPUS_REDIS_PASSWORD:}
+octopus:
+  environment: ${OCTOPUS_ENVIRONMENT:local}
+  kafka:
+    telemetry-raw-topic: ${OCTOPUS_TELEMETRY_RAW_TOPIC:octopus.local.telemetry.raw.v1}
+    telemetry-quarantine-topic: ${OCTOPUS_TELEMETRY_QUARANTINE_TOPIC:octopus.local.telemetry.quarantine.v1}
+    telemetry-normalized-topic: ${OCTOPUS_TELEMETRY_NORMALIZED_TOPIC:octopus.local.telemetry.normalized.v1}
+    telemetry-dlt-topic: ${OCTOPUS_TELEMETRY_DLT_TOPIC:octopus.local.telemetry.raw.dlt.v1}
+    meter-configuration-topic: ${OCTOPUS_METER_CONFIGURATION_TOPIC:octopus.local.catalog.meter-configuration.v1}
+    collect-group: ${OCTOPUS_COLLECT_GROUP:octopus-collect-v1}
+    catalog-group: ${OCTOPUS_CATALOG_GROUP:octopus-collect-catalog-v1}
+    catalog-dlt-topic: ${OCTOPUS_CATALOG_DLT_TOPIC:octopus.local.catalog.meter-configuration.dlt.v1}
+    retry:
+      max-attempts: ${OCTOPUS_KAFKA_RETRY_MAX_ATTEMPTS:8}
+      initial-interval: ${OCTOPUS_KAFKA_RETRY_INITIAL_INTERVAL:PT1S}
+      max-interval: ${OCTOPUS_KAFKA_RETRY_MAX_INTERVAL:PT30S}
+  influx:
+    url: ${OCTOPUS_INFLUX_URL:http://localhost:8086}
+    token: ${OCTOPUS_INFLUX_TOKEN:}
+    org: ${OCTOPUS_INFLUX_ORG:octopus}
+    bucket: ${OCTOPUS_INFLUX_BUCKET:octopus-telemetry}
+  collect:
+    deduplication-ttl: ${OCTOPUS_DEDUPLICATION_TTL:PT168H}
+server:
+  shutdown: graceful
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

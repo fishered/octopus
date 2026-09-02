@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.FacilityMapper">
+    <insert id="insertFacility">
+        INSERT INTO facility (id, tenant_id, organization_id, parent_id, code, display_name,
+                              facility_type, zone_id, geometry, status, version, created_at, updated_at)
+        VALUES (#{facility.id}, #{facility.tenantId}, #{facility.organizationId}, #{facility.parentId},
+                #{facility.code}, #{facility.displayName}, #{facility.facilityType}, #{facility.zoneId},
+                <choose>
+                    <when test="facility.geometryGeoJson != null">
+                        ST_SetSRID(ST_GeomFromGeoJSON(#{facility.geometryGeoJson}), 4326)
+                    </when>
+                    <otherwise>NULL</otherwise>
+                </choose>,
+                #{facility.status}, #{facility.version}, #{facility.createdAt}, #{facility.updatedAt})
+    </insert>
+
+    <select id="findOrganizationPath" resultType="string">
+        SELECT path FROM organization WHERE id = #{organizationId} AND status = 'ACTIVE'
+    </select>
+
+    <select id="findParentContext" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.FacilityMapper$ParentContextRow">
+        SELECT organization_id FROM facility WHERE id = #{parentFacilityId} AND status = 'ACTIVE'
+    </select>
+
+    <select id="findDetails" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.FacilityMapper$FacilityDetailsRow">
+        SELECT facility.id, facility.tenant_id, facility.organization_id, facility.parent_id,
+               facility.code, facility.display_name, facility.facility_type, facility.zone_id,
+               ST_AsGeoJSON(facility.geometry) AS geometry_geo_json, facility.status,
+               facility.version, facility.created_at, facility.updated_at,
+               organization.path AS organization_path
+          FROM facility
+          JOIN organization ON organization.id = facility.organization_id
+                           AND organization.tenant_id = facility.tenant_id
+         WHERE facility.id = #{facilityId}
+    </select>
+
+    <select id="findIntersecting" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.FacilityMapper$FacilityDetailsRow">
+        SELECT facility.id, facility.tenant_id, facility.organization_id, facility.parent_id,
+               facility.code, facility.display_name, facility.facility_type, facility.zone_id,
+               ST_AsGeoJSON(facility.geometry) AS geometry_geo_json, facility.status,
+               facility.version, facility.created_at, facility.updated_at,
+               organization.path AS organization_path
+          FROM facility
+          JOIN organization ON organization.id = facility.organization_id
+                           AND organization.tenant_id = facility.tenant_id
+         WHERE facility.geometry IS NOT NULL
+           AND facility.status = 'ACTIVE'
+           AND (
+                (#{minLongitude} &lt;= #{maxLongitude}
+                 AND facility.geometry &amp;&amp; ST_MakeEnvelope(#{minLongitude}, #{minLatitude},
+                                                           #{maxLongitude}, #{maxLatitude}, 4326))
+                OR
+                (#{minLongitude} &gt; #{maxLongitude}
+                 AND (facility.geometry &amp;&amp; ST_MakeEnvelope(#{minLongitude}, #{minLatitude}, 180, #{maxLatitude}, 4326)
+                      OR facility.geometry &amp;&amp; ST_MakeEnvelope(-180, #{minLatitude}, #{maxLongitude}, #{maxLatitude}, 4326)))
+           )
+         ORDER BY facility.code
+    </select>
+</mapper>

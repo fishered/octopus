@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DesiredStateModelMapper">
+    <select id="findPublishedModelVersion" resultType="long">
+        SELECT model.model_version
+          FROM device
+          JOIN thing_model model ON model.id = device.thing_model_id
+                                AND model.model_version = device.model_version
+         WHERE device.id = #{deviceId} AND device.status = 'ACTIVE'
+           AND model.status = 'PUBLISHED'
+    </select>
+
+    <select id="findWritableProperties" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DesiredStateModelMapper$PropertyRow">
+        SELECT parameter.code, parameter.data_type
+          FROM device
+          JOIN thing_model model ON model.id = device.thing_model_id
+                                AND model.model_version = device.model_version
+          JOIN thing_model_parameter binding ON binding.thing_model_id = model.id
+          JOIN parameter_definition parameter ON parameter.id = binding.parameter_id
+         WHERE device.id = #{deviceId} AND device.status = 'ACTIVE'
+           AND model.status = 'PUBLISHED' AND parameter.status = 'ACTIVE'
+           AND binding.access_mode IN ('WRITE_ONLY', 'READ_WRITE')
+         ORDER BY binding.sort_order
+    </select>
+</mapper>

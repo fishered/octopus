@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.control.DeviceCommandRequestMapper">
+    <select id="findByIdempotency" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.control.DeviceCommandRequestMapper$CommandRow">
+        SELECT command_id, tenant_id, organization_id, device_id, requested_by, idempotency_key,
+               operation, payload_sha256, status, failure_code, requested_at, expires_at,
+               dispatched_at, acknowledged_at, completed_at, status_updated_at, version,
+               NULL::text AS organization_path
+          FROM device_command_request
+         WHERE requested_by = #{requestedBy} AND idempotency_key = #{idempotencyKey}
+    </select>
+
+    <select id="find" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.control.DeviceCommandRequestMapper$CommandRow">
+        SELECT request.command_id, request.tenant_id, request.organization_id, request.device_id,
+               request.requested_by, request.idempotency_key, request.operation, request.payload_sha256,
+               request.status, request.failure_code, request.requested_at, request.expires_at,
+               request.dispatched_at, request.acknowledged_at, request.completed_at,
+               request.status_updated_at, request.version, organization.path AS organization_path
+          FROM device_command_request request
+          JOIN organization ON organization.id = request.organization_id
+                           AND organization.tenant_id = request.tenant_id
+         WHERE request.command_id = #{commandId}
+    </select>
+
+    <select id="findForUpdate" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.control.DeviceCommandRequestMapper$CommandRow">
+        SELECT command_id, tenant_id, organization_id, device_id, requested_by, idempotency_key,
+               operation, payload_sha256, status, failure_code, requested_at, expires_at,
+               dispatched_at, acknowledged_at, completed_at, status_updated_at, version,
+               NULL::text AS organization_path
+          FROM device_command_request
+         WHERE command_id = #{commandId}
+         FOR UPDATE
+    </select>
+
+    <insert id="insertCommand">
+        INSERT INTO device_command_request(command_id, tenant_id, organization_id, device_id,
+               requested_by, idempotency_key, operation, payload_sha256, status, failure_code,
+               requested_at, expires_at, dispatched_at, acknowledged_at, completed_at,
+               status_updated_at, version)
+        VALUES (#{commandId}, #{tenantId}, #{organizationId}, #{deviceId}, #{requestedBy},
+               #{idempotencyKey}, #{operation}, #{payloadSha256}, #{status}, #{failureCode},
+               #{requestedAt}, #{expiresAt}, #{dispatchedAt}, #{acknowledgedAt}, #{completedAt},
+               #{statusUpdatedAt}, #{version})
+    </insert>
+
+    <update id="updateCommand">
+        UPDATE device_command_request
+           SET status = #{command.status}, failure_code = #{command.failureCode},
+               dispatched_at = #{command.dispatchedAt}, acknowledged_at = #{command.acknowledgedAt},
+               completed_at = #{command.completedAt}, status_updated_at = #{command.statusUpdatedAt},
+               version = #{command.version}
+         WHERE command_id = #{command.commandId} AND version = #{expectedVersion}
+    </update>
+
+    <insert id="insertOutbox">
+        INSERT INTO integration_outbox(id, tenant_id, topic, partition_key, event_type, payload,
+                                       status, attempts, available_at, occurred_at)
+        VALUES (#{id}, #{tenantId}, #{topic}, #{partitionKey}, #{eventType}, CAST(#{payload} AS jsonb),
+                'PENDING', 0, #{occurredAt}, #{occurredAt})
+    </insert>
+
+    <insert id="insertStatusInbox">
+        INSERT INTO device_command_status_inbox(tenant_id, event_id, command_id, received_at)
+        VALUES (#{tenantId}, #{eventId}, #{commandId}, #{receivedAt})
+        ON CONFLICT (tenant_id, event_id) DO NOTHING
+    </insert>
+</mapper>

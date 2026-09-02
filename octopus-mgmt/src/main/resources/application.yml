@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: octopus-mgmt
+  aop:
+    proxy-target-class: false
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  flyway:
+    enabled: true
+  datasource:
+    url: ${OCTOPUS_PG_URL:jdbc:postgresql://localhost:5432/octopus}
+    username: ${OCTOPUS_PG_USERNAME:octopus_app}
+    password: ${OCTOPUS_PG_PASSWORD:}
+  data:
+    redis:
+      host: ${OCTOPUS_REDIS_HOST:localhost}
+      port: ${OCTOPUS_REDIS_PORT:6379}
+      password: ${OCTOPUS_REDIS_PASSWORD:}
+  kafka:
+    bootstrap-servers: ${OCTOPUS_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      enable-auto-commit: false
+      isolation-level: read_committed
+      auto-offset-reset: earliest
+      max-poll-records: 100
+    listener:
+      ack-mode: manual_immediate
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+octopus:
+  environment: ${OCTOPUS_ENVIRONMENT:local}
+  kafka:
+    meter-configuration-topic: ${OCTOPUS_METER_CONFIGURATION_TOPIC:octopus.local.catalog.meter-configuration.v1}
+    catalog-dlt-topic: ${OCTOPUS_CATALOG_DLT_TOPIC:octopus.local.catalog.meter-configuration.dlt.v1}
+    telemetry-raw-topic: ${OCTOPUS_TELEMETRY_RAW_TOPIC:octopus.local.telemetry.raw.v1}
+    telemetry-dlt-topic: ${OCTOPUS_TELEMETRY_DLT_TOPIC:octopus.local.telemetry.raw.dlt.v1}
+    telemetry-normalized-topic: ${OCTOPUS_TELEMETRY_NORMALIZED_TOPIC:octopus.local.telemetry.normalized.v1}
+    alarm-group: ${OCTOPUS_ALARM_GROUP:octopus-mgmt-alarm-v1}
+    command-requested-topic: ${OCTOPUS_COMMAND_REQUESTED_TOPIC:octopus.local.command.requested.v1}
+    command-status-topic: ${OCTOPUS_COMMAND_STATUS_TOPIC:octopus.local.command.status.v1}
+    command-status-group: ${OCTOPUS_COMMAND_STATUS_GROUP:octopus-mgmt-command-status-v1}
+    shadow-reported-topic: ${OCTOPUS_SHADOW_REPORTED_TOPIC:octopus.local.shadow.reported.v1}
+    shadow-projection-group: ${OCTOPUS_SHADOW_PROJECTION_GROUP:octopus-mgmt-shadow-v1}
+    dlt-replay:
+      maximum-attempts: ${OCTOPUS_DLT_REPLAY_MAXIMUM_ATTEMPTS:3}
+      read-timeout: ${OCTOPUS_DLT_REPLAY_READ_TIMEOUT:PT5S}
+      publish-timeout: ${OCTOPUS_DLT_REPLAY_PUBLISH_TIMEOUT:PT30S}
+  security:
+    jwt:
+      issuer: ${OCTOPUS_JWT_ISSUER:http://localhost:8080}
+      key-id: ${OCTOPUS_JWT_KEY_ID:octopus-local-1}
+      public-key: ${OCTOPUS_JWT_PUBLIC_KEY:file:/run/secrets/octopus-jwt-public.pem}
+      private-key: ${OCTOPUS_JWT_PRIVATE_KEY:file:/run/secrets/octopus-jwt-private.pem}
+      access-lifetime: ${OCTOPUS_ACCESS_TOKEN_LIFETIME:PT10M}
+    refresh-token-hmac-key: ${OCTOPUS_REFRESH_TOKEN_HMAC_KEY:}
+    totp-aes-key: ${OCTOPUS_TOTP_AES_KEY:}
+    totp-issuer: ${OCTOPUS_TOTP_ISSUER:Octopus}
+    totp-enrollment-ttl: ${OCTOPUS_TOTP_ENROLLMENT_TTL:PT10M}
+    session:
+      idle-timeout: ${OCTOPUS_SESSION_IDLE_TIMEOUT:PT30M}
+      absolute-timeout: ${OCTOPUS_SESSION_ABSOLUTE_TIMEOUT:PT8H}
+  outbox:
+    batch-size: ${OCTOPUS_OUTBOX_BATCH_SIZE:20}
+    poll-delay: ${OCTOPUS_OUTBOX_POLL_DELAY:1000}
+  influx:
+    url: ${OCTOPUS_INFLUX_URL:http://localhost:8086}
+    token: ${OCTOPUS_INFLUX_TOKEN:}
+    org: ${OCTOPUS_INFLUX_ORG:octopus}
+    bucket: ${OCTOPUS_INFLUX_BUCKET:octopus-telemetry}
+  storage:
+    type: ${OCTOPUS_STORAGE_TYPE:local}
+    local:
+      root: ${OCTOPUS_STORAGE_LOCAL_ROOT:./data/objects}
+    s3:
+      bucket: ${OCTOPUS_STORAGE_S3_BUCKET:}
+      region: ${OCTOPUS_STORAGE_S3_REGION:us-east-1}
+      prefix: ${OCTOPUS_STORAGE_S3_PREFIX:}
+      endpoint: ${OCTOPUS_STORAGE_S3_ENDPOINT:}
+      path-style: ${OCTOPUS_STORAGE_S3_PATH_STYLE:false}
+      encryption: ${OCTOPUS_STORAGE_S3_ENCRYPTION:S3_MANAGED}
+      kms-key-id: ${OCTOPUS_STORAGE_S3_KMS_KEY_ID:}
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+server.shutdown: graceful
+management.endpoint.health.probes.enabled: true

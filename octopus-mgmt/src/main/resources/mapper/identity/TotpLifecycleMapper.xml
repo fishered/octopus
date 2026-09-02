@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.TotpLifecycleMapper">
+    <select id="findActive" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.TotpLifecycleMapper$FactorRow">
+        SELECT id AS factor_id, account_id, encrypted_secret, status, expires_at
+          FROM mfa_factor
+         WHERE account_id = #{accountId} AND factor_type = 'TOTP' AND status = 'ACTIVE'
+    </select>
+
+    <select id="findPending" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.TotpLifecycleMapper$FactorRow">
+        SELECT id AS factor_id, account_id, encrypted_secret, status, expires_at
+          FROM mfa_factor
+         WHERE account_id = #{accountId} AND id = #{factorId}
+           AND factor_type = 'TOTP' AND status = 'PENDING' AND expires_at &gt; #{now}
+    </select>
+
+    <select id="findCurrent" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.TotpLifecycleMapper$FactorRow">
+        SELECT id AS factor_id, account_id, encrypted_secret, status, expires_at
+          FROM mfa_factor
+         WHERE account_id = #{accountId} AND factor_type = 'TOTP' AND status IN ('ACTIVE', 'PENDING')
+         ORDER BY CASE status WHEN 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC
+         LIMIT 1
+    </select>
+
+    <update id="revokePending">
+        UPDATE mfa_factor
+           SET status = 'REVOKED', encrypted_secret = NULL, revoked_at = #{now},
+               revoke_reason = 'Superseded enrollment', updated_at = #{now}
+         WHERE account_id = #{accountId} AND factor_type = 'TOTP' AND status = 'PENDING'
+    </update>
+
+    <insert id="insertPending">
+        INSERT INTO mfa_factor (id, account_id, factor_type, encrypted_secret, key_version,
+                                status, last_accepted_counter, expires_at, created_at, updated_at)
+        VALUES (#{factorId}, #{accountId}, 'TOTP', #{encryptedSecret}, #{keyVersion},
+                'PENDING', -1, #{expiresAt}, #{now}, #{now})
+    </insert>
+
+    <update id="activate">
+        UPDATE mfa_factor
+           SET status = 'ACTIVE', verified_at = #{now}, expires_at = NULL,
+               last_accepted_counter = #{acceptedCounter}, updated_at = #{now}
+         WHERE id = #{factorId} AND account_id = #{accountId}
+           AND factor_type = 'TOTP' AND status = 'PENDING' AND expires_at &gt; #{now}
+    </update>
+
+    <insert id="insertRecoveryCode">
+        INSERT INTO mfa_recovery_code (id, account_id, factor_id, code_hash,
+                                       status, created_at, updated_at)
+        VALUES (#{id}, #{accountId}, #{factorId}, #{codeHash}, 'ACTIVE', #{now}, #{now})
+    </insert>
+
+    <update id="revokeFactors">
+        UPDATE mfa_factor
+           SET status = 'REVOKED', encrypted_secret = NULL, revoked_at = #{now},
+               revoke_reason = #{reason}, updated_at = #{now}
+         WHERE account_id = #{accountId} AND factor_type = 'TOTP' AND status IN ('ACTIVE', 'PENDING')
+    </update>
+
+    <update id="revokeRecoveryCodes">
+        UPDATE mfa_recovery_code SET status = 'REVOKED', updated_at = #{now}
+         WHERE account_id = #{accountId} AND status = 'ACTIVE'
+    </update>
+
+    <update id="advanceSessionGeneration">
+        UPDATE account
+           SET session_generation = GREATEST(session_generation, #{generation}), updated_at = #{now}
+         WHERE id = #{accountId}
+    </update>
+
+    <insert id="insertAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, NULL, #{actorAccountId}, #{sessionId}, #{eventType},
+                'mfa_factor', #{accountId}, 'SUCCESS', #{reason}, #{now},
+                jsonb_strip_nulls(jsonb_build_object('accountId', #{accountId}::text,
+                    'factorId', #{factorId}::text,
+                    'sessionGeneration', #{sessionGeneration}, 'recoveryCodeCount', #{recoveryCodeCount})))
+    </insert>
+
+    <select id="findActiveRecoveryCodes" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.TotpLifecycleMapper$RecoveryCodeRow">
+        SELECT id, code_hash FROM mfa_recovery_code
+         WHERE account_id = #{accountId} AND factor_id = #{factorId} AND status = 'ACTIVE'
+         ORDER BY created_at, id
+    </select>
+
+    <update id="consumeRecoveryCode">
+        UPDATE mfa_recovery_code SET status = 'USED', used_at = #{now}, updated_at = #{now}
+         WHERE id = #{id} AND status = 'ACTIVE'
+    </update>
+
+    <insert id="insertRecoveryCodeUseAudit">
+        INSERT INTO security_audit_event (id, tenant_id, actor_account_id, session_id, event_type,
+                                          resource_type, resource_id, outcome, reason, occurred_at, details)
+        VALUES (#{id}, NULL, #{accountId}, NULL, 'MFA_RECOVERY_CODE_USED',
+                'mfa_recovery_code', #{recoveryCodeId}, 'SUCCESS', 'Recovery code authentication', #{now},
+                jsonb_build_object('accountId', #{accountId}::text, 'factorId', #{factorId}::text))
+    </insert>
+</mapper>

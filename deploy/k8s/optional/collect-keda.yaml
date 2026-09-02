@@ -1,0 +1,17 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata: { name: octopus-collect, namespace: octopus }
+spec:
+  scaleTargetRef: { name: octopus-collect }
+  minReplicaCount: 2
+  maxReplicaCount: 48
+  cooldownPeriod: 60
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka.kafka.svc.cluster.local:9092
+        consumerGroup: octopus-collect-v1
+        topic: octopus.production.telemetry.raw.v1
+        lagThreshold: "10000"
+        offsetResetPolicy: earliest
+

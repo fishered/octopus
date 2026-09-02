@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.catalog.ThingModelMapper">
+    <insert id="insertModel">
+        INSERT INTO thing_model (id, tenant_id, device_type_id, code, display_name, model_version,
+                                 schema_document, status, published_at, created_at)
+        VALUES (#{model.id}, #{model.tenantId}, #{model.deviceTypeId}, #{model.code}, #{model.displayName},
+                #{model.modelVersion}, CAST(#{model.schemaDocument} AS jsonb), #{model.status},
+                #{model.publishedAt}, #{model.createdAt})
+    </insert>
+
+    <insert id="insertParameter">
+        INSERT INTO thing_model_parameter (tenant_id, thing_model_id, parameter_id, unit_id, required,
+                                           sort_order, access_mode)
+        VALUES (#{tenantId}, #{thingModelId}, #{parameterId}, #{unitId}, #{required}, #{sortOrder}, #{accessMode})
+    </insert>
+
+    <select id="findModel" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.catalog.ThingModelEntity">
+        SELECT id, tenant_id, device_type_id, code, display_name, model_version,
+               schema_document::text AS schema_document, status, published_at, created_at
+          FROM thing_model
+         WHERE id = #{thingModelId}
+    </select>
+
+    <select id="findParameters" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.catalog.ThingModelMapper$ParameterBindingRow">
+        SELECT parameter_id, unit_id, required, sort_order, access_mode
+          FROM thing_model_parameter
+         WHERE thing_model_id = #{thingModelId}
+         ORDER BY sort_order
+    </select>
+
+    <update id="updateLifecycle">
+        UPDATE thing_model
+           SET status = #{model.status}, published_at = #{model.publishedAt}
+         WHERE id = #{model.id} AND status = 'DRAFT'
+    </update>
+
+    <select id="countVersion" resultType="long">
+        SELECT count(*) FROM thing_model WHERE code = #{code} AND model_version = #{modelVersion}
+    </select>
+
+    <select id="countSameDimension" resultType="long">
+        SELECT count(*)
+          FROM unit_catalog first_unit
+          JOIN unit_catalog second_unit ON second_unit.dimension = first_unit.dimension
+         WHERE first_unit.id = #{firstUnitId} AND second_unit.id = #{secondUnitId}
+    </select>
+</mapper>

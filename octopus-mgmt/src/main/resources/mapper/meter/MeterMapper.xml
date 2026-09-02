@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.meter.MeterMapper">
+    <insert id="insertMeter">
+        INSERT INTO meter (id, tenant_id, device_id, facility_id, parameter_id, unit_id, code,
+                           display_name, meter_kind, calculation_expression, rollover_modulus,
+                           decimal_scale, status, version, created_at, updated_at)
+        VALUES (#{meter.id}, #{meter.tenantId}, #{meter.deviceId}, #{meter.facilityId},
+                #{meter.parameterId}, #{meter.unitId}, #{meter.code}, #{meter.displayName},
+                #{meter.meterKind},
+                <choose>
+                    <when test="meter.calculationExpression != null">CAST(#{meter.calculationExpression} AS jsonb)</when>
+                    <otherwise>NULL</otherwise>
+                </choose>,
+                #{meter.rolloverModulus}, #{meter.decimalScale}, #{meter.status}, #{meter.version},
+                #{meter.createdAt}, #{meter.updatedAt})
+    </insert>
+
+    <insert id="insertOutbox">
+        INSERT INTO integration_outbox (id, tenant_id, topic, partition_key, event_type, payload,
+                                        status, attempts, available_at, occurred_at)
+        VALUES (#{id}, #{tenantId}, #{topic}, #{partitionKey}, #{eventType}, CAST(#{payload} AS jsonb),
+                'PENDING', 0, #{occurredAt}, #{occurredAt})
+    </insert>
+
+    <select id="findDeviceContext" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.meter.MeterMapper$DeviceContextRow">
+        SELECT device.tenant_id, organization.path AS organization_path, device.model_version
+          FROM device
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = device.tenant_id
+         WHERE device.id = #{deviceId} AND device.status = 'ACTIVE'
+    </select>
+
+    <select id="findParameterConfiguration" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.meter.MeterMapper$ParameterConfigurationRow">
+        SELECT parameter.value_semantics AS semantics,
+               source_unit.code AS source_unit_code,
+               canonical_unit.code AS canonical_unit_code,
+               source_unit.scale,
+               source_unit.offset_value AS offset,
+               COALESCE(parameter.decimal_scale,
+                        CASE WHEN parameter.data_type = 'INTEGER' THEN 0 ELSE 6 END) AS default_decimal_scale
+          FROM parameter_definition parameter
+          JOIN unit_catalog source_unit ON source_unit.id = #{unitId}
+          JOIN unit_catalog canonical_unit ON canonical_unit.id = parameter.canonical_unit_id
+                                          AND canonical_unit.dimension = source_unit.dimension
+         WHERE parameter.id = #{parameterId} AND parameter.status = 'ACTIVE'
+    </select>
+
+    <select id="countBinding" resultType="long">
+        SELECT count(*)
+          FROM device
+          JOIN thing_model ON thing_model.id = device.thing_model_id
+                          AND thing_model.model_version = device.model_version
+                          AND thing_model.status = 'PUBLISHED'
+          JOIN thing_model_parameter binding ON binding.thing_model_id = thing_model.id
+         WHERE device.id = #{deviceId}
+           AND binding.parameter_id = #{parameterId}
+           AND binding.unit_id = #{unitId}
+    </select>
+
+    <select id="countFacility" resultType="long">
+        SELECT count(*) FROM facility WHERE id = #{facilityId} AND status = 'ACTIVE'
+    </select>
+
+    <select id="findDetails" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.meter.MeterMapper$MeterDetailsRow">
+        SELECT meter.id, meter.tenant_id, meter.device_id, meter.facility_id, meter.parameter_id,
+               meter.unit_id, meter.code, meter.display_name, meter.meter_kind,
+               meter.calculation_expression::text AS calculation_expression,
+               meter.rollover_modulus, meter.decimal_scale, meter.status, meter.version,
+               meter.created_at, meter.updated_at, parameter.value_semantics AS semantics,
+               organization.path AS organization_path,
+               canonical_unit.code AS canonical_unit_code,
+               COALESCE(facility.zone_id, organization.zone_id, tenant.default_zone_id) AS effective_zone_id
+          FROM meter
+          JOIN device ON device.id = meter.device_id AND device.tenant_id = meter.tenant_id
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = device.tenant_id
+          JOIN parameter_definition parameter ON parameter.id = meter.parameter_id
+          JOIN unit_catalog canonical_unit ON canonical_unit.id = parameter.canonical_unit_id
+          JOIN tenant ON tenant.id = meter.tenant_id
+          LEFT JOIN facility ON facility.id = meter.facility_id
+                            AND facility.tenant_id = meter.tenant_id
+         WHERE meter.id = #{meterId}
+    </select>
+</mapper>

@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: octopus-mgmt, namespace: octopus }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: octopus-mgmt } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: octopus-mgmt, app.kubernetes.io/part-of: octopus } }
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      topologySpreadConstraints:
+        - { maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app.kubernetes.io/name: octopus-mgmt } } }
+      containers:
+        - name: app
+          image: registry.example.com/octopus/octopus-mgmt:0.1.0
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "2", memory: 1Gi } }
+          startupProbe: &startup { httpGet: { path: /actuator/health/liveness, port: http }, failureThreshold: 30, periodSeconds: 5 }
+          readinessProbe: &ready { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
+          livenessProbe: &live { httpGet: { path: /actuator/health/liveness, port: http }, periodSeconds: 10, timeoutSeconds: 2, failureThreshold: 3 }
+          securityContext: &containerSecurity { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes: [{ name: tmp, emptyDir: { medium: Memory, sizeLimit: 128Mi } }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: octopus-collect, namespace: octopus }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: octopus-collect } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: octopus-collect, app.kubernetes.io/part-of: octopus } }
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      topologySpreadConstraints:
+        - { maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app.kubernetes.io/name: octopus-collect } } }
+      containers:
+        - name: app
+          image: registry.example.com/octopus/octopus-collect:0.1.0
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+          resources: { requests: { cpu: 500m, memory: 768Mi }, limits: { cpu: "4", memory: 2Gi } }
+          startupProbe: { httpGet: { path: /actuator/health/liveness, port: http }, failureThreshold: 30, periodSeconds: 5 }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
+          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http }, periodSeconds: 10, timeoutSeconds: 2, failureThreshold: 3 }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes: [{ name: tmp, emptyDir: { medium: Memory, sizeLimit: 128Mi } }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: octopus-control, namespace: octopus }
+spec:
+  serviceName: octopus-control-headless
+  podManagementPolicy: Parallel
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: octopus-control } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: octopus-control, app.kubernetes.io/part-of: octopus } }
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: app
+          image: registry.example.com/octopus/octopus-control:0.1.0
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: mqtt-tls, mountPath: /run/secrets/octopus-mqtt, readOnly: true }
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "2", memory: 1Gi } }
+          startupProbe: { httpGet: { path: /actuator/health/liveness, port: http }, failureThreshold: 30, periodSeconds: 5 }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
+          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http }, periodSeconds: 10, timeoutSeconds: 2, failureThreshold: 3 }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 128Mi } }
+        - { name: mqtt-tls, secret: { secretName: octopus-mqtt-tls, optional: true } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: octopus-ca, namespace: octopus }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: octopus-ca } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: octopus-ca, app.kubernetes.io/part-of: octopus } }
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: app
+          image: registry.example.com/octopus/octopus-ca:0.1.0
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: ca-signing, mountPath: /run/secrets/octopus-ca, readOnly: true }
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "2", memory: 1Gi } }
+          startupProbe: { httpGet: { path: /actuator/health/liveness, port: http }, failureThreshold: 30, periodSeconds: 5 }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
+          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http }, periodSeconds: 10, timeoutSeconds: 2, failureThreshold: 3 }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 128Mi } }
+        - { name: ca-signing, secret: { secretName: octopus-ca-signing, optional: true } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: octopus-agent, namespace: octopus }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: octopus-agent } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: octopus-agent, app.kubernetes.io/part-of: octopus } }
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: app
+          image: registry.example.com/octopus/octopus-agent:0.1.0
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: "1", memory: 512Mi } }
+          startupProbe: { httpGet: { path: /actuator/health/liveness, port: http }, failureThreshold: 30, periodSeconds: 5 }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
+          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http }, periodSeconds: 10, timeoutSeconds: 2, failureThreshold: 3 }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes: [{ name: tmp, emptyDir: { medium: Memory, sizeLimit: 128Mi } }]

@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: octopus-ca
+  aop:
+    proxy-target-class: false
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: ${OCTOPUS_CA_PG_URL:${OCTOPUS_PG_URL:jdbc:postgresql://localhost:5432/octopus_ca}}
+    username: ${OCTOPUS_CA_PG_USERNAME:${OCTOPUS_PG_USERNAME:octopus_app}}
+    password: ${OCTOPUS_CA_PG_PASSWORD:${OCTOPUS_PG_PASSWORD:}}
+  flyway:
+    enabled: true
+octopus:
+  ca:
+    bootstrap-hmac-key: ${OCTOPUS_CA_BOOTSTRAP_HMAC_KEY:}
+    signing:
+      mode: ${OCTOPUS_CA_SIGNING_MODE:disabled}
+      key-store: ${OCTOPUS_CA_SIGNING_KEY_STORE:}
+      key-store-password: ${OCTOPUS_CA_SIGNING_KEY_STORE_PASSWORD:}
+      key-alias: ${OCTOPUS_CA_SIGNING_KEY_ALIAS:octopus-issuing-ca}
+  security:
+    jwt:
+      issuer: ${OCTOPUS_JWT_ISSUER:http://localhost:8080}
+      jwk-set-uri: ${OCTOPUS_JWK_SET_URI:http://localhost:8080/oauth2/jwks}
+      audience: ${OCTOPUS_JWT_AUDIENCE:octopus-api}
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+server:
+  shutdown: graceful
+management.endpoint.health.probes.enabled: true

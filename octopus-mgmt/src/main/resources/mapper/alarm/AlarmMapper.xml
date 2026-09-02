@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper">
+    <select id="countRuleCode" resultType="long">
+        SELECT count(*) FROM alarm_rule WHERE code = #{code}
+    </select>
+
+    <select id="findMeterContext" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper$MeterContextRow">
+        SELECT meter.tenant_id, device.organization_id, meter.device_id, meter.parameter_id,
+               organization.path AS organization_path
+          FROM meter
+          JOIN device ON device.id = meter.device_id AND device.tenant_id = meter.tenant_id
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = meter.tenant_id
+         WHERE meter.id = #{meterId}
+           AND meter.status = 'ACTIVE'
+           AND device.status IN ('REGISTERED', 'ACTIVE')
+           AND organization.status = 'ACTIVE'
+    </select>
+
+    <select id="findDeviceContext" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper$DeviceContextRow">
+        SELECT device.tenant_id, organization.path AS organization_path
+          FROM device
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = device.tenant_id
+         WHERE device.id = #{deviceId}
+           AND device.status IN ('REGISTERED', 'ACTIVE')
+           AND organization.status = 'ACTIVE'
+    </select>
+
+    <insert id="insertRule">
+        INSERT INTO alarm_rule(id, tenant_id, organization_id, device_id, meter_id, parameter_id,
+                               code, display_name, value_selector, comparison, trigger_threshold,
+                               clear_threshold, severity, status, version, created_at, updated_at)
+        VALUES (#{id}, #{tenantId}, #{organizationId}, #{deviceId}, #{meterId}, #{parameterId},
+                #{code}, #{displayName}, #{valueSelector}, #{comparison}, #{triggerThreshold},
+                #{clearThreshold}, #{severity}, #{status}, #{version}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <select id="findRule" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper$AlarmRuleRow">
+        SELECT alarm_rule.id, alarm_rule.tenant_id, alarm_rule.organization_id, alarm_rule.device_id,
+               alarm_rule.meter_id, alarm_rule.parameter_id, alarm_rule.code, alarm_rule.display_name,
+               alarm_rule.value_selector, alarm_rule.comparison, alarm_rule.trigger_threshold,
+               alarm_rule.clear_threshold, alarm_rule.severity, alarm_rule.status, alarm_rule.version,
+               alarm_rule.created_at, alarm_rule.updated_at, organization.path AS organization_path
+          FROM alarm_rule
+          JOIN organization ON organization.id = alarm_rule.organization_id
+                           AND organization.tenant_id = alarm_rule.tenant_id
+         WHERE alarm_rule.id = #{ruleId}
+    </select>
+
+    <select id="findIncident" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper$AlarmIncidentRow">
+        SELECT alarm_incident.id, alarm_incident.tenant_id, alarm_incident.rule_id,
+               alarm_incident.organization_id, alarm_incident.device_id, alarm_incident.meter_id,
+               alarm_incident.parameter_id, alarm_incident.severity, alarm_incident.state,
+               alarm_incident.trigger_value, alarm_incident.latest_value, alarm_incident.occurrence_count,
+               alarm_incident.opened_at, alarm_incident.last_observed_at, alarm_incident.acknowledged_by,
+               alarm_incident.acknowledged_at, alarm_incident.cleared_at, alarm_incident.version,
+               alarm_incident.updated_at, organization.path AS organization_path
+          FROM alarm_incident
+          JOIN organization ON organization.id = alarm_incident.organization_id
+                           AND organization.tenant_id = alarm_incident.tenant_id
+         WHERE alarm_incident.id = #{incidentId}
+    </select>
+
+    <select id="findDeviceIncidents" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper$AlarmIncidentRow">
+        SELECT alarm_incident.id, alarm_incident.tenant_id, alarm_incident.rule_id,
+               alarm_incident.organization_id, alarm_incident.device_id, alarm_incident.meter_id,
+               alarm_incident.parameter_id, alarm_incident.severity, alarm_incident.state,
+               alarm_incident.trigger_value, alarm_incident.latest_value, alarm_incident.occurrence_count,
+               alarm_incident.opened_at, alarm_incident.last_observed_at, alarm_incident.acknowledged_by,
+               alarm_incident.acknowledged_at, alarm_incident.cleared_at, alarm_incident.version,
+               alarm_incident.updated_at, NULL::text AS organization_path
+          FROM alarm_incident
+         WHERE alarm_incident.device_id = #{deviceId}
+           AND alarm_incident.state IN
+           <foreach collection="states" item="state" open="(" separator="," close=")">
+               #{state}
+           </foreach>
+         ORDER BY alarm_incident.opened_at DESC, alarm_incident.id
+         LIMIT #{limit}
+    </select>
+
+    <select id="findActiveRules" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper$AlarmRuleRow">
+        SELECT alarm_rule.id, alarm_rule.tenant_id, alarm_rule.organization_id, alarm_rule.device_id,
+               alarm_rule.meter_id, alarm_rule.parameter_id, alarm_rule.code, alarm_rule.display_name,
+               alarm_rule.value_selector, alarm_rule.comparison, alarm_rule.trigger_threshold,
+               alarm_rule.clear_threshold, alarm_rule.severity, alarm_rule.status, alarm_rule.version,
+               alarm_rule.created_at, alarm_rule.updated_at, NULL::text AS organization_path
+          FROM alarm_rule
+         WHERE alarm_rule.meter_id = #{meterId}
+           AND alarm_rule.parameter_id = #{parameterId}
+           AND alarm_rule.status = 'ACTIVE'
+         ORDER BY alarm_rule.id
+    </select>
+
+    <insert id="insertEvaluation">
+        INSERT INTO alarm_evaluation_event(tenant_id, rule_id, source_event_id, occurred_at, processed_at)
+        VALUES (#{tenantId}, #{ruleId}, #{sourceEventId}, #{occurredAt}, #{processedAt})
+        ON CONFLICT (tenant_id, rule_id, source_event_id) DO NOTHING
+    </insert>
+
+    <select id="findOpenIncidentForUpdate" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.alarm.AlarmMapper$AlarmIncidentRow">
+        SELECT alarm_incident.id, alarm_incident.tenant_id, alarm_incident.rule_id,
+               alarm_incident.organization_id, alarm_incident.device_id, alarm_incident.meter_id,
+               alarm_incident.parameter_id, alarm_incident.severity, alarm_incident.state,
+               alarm_incident.trigger_value, alarm_incident.latest_value, alarm_incident.occurrence_count,
+               alarm_incident.opened_at, alarm_incident.last_observed_at, alarm_incident.acknowledged_by,
+               alarm_incident.acknowledged_at, alarm_incident.cleared_at, alarm_incident.version,
+               alarm_incident.updated_at, NULL::text AS organization_path
+          FROM alarm_incident
+         WHERE alarm_incident.rule_id = #{ruleId}
+           AND alarm_incident.meter_id = #{meterId}
+           AND alarm_incident.state IN ('OPEN', 'ACKNOWLEDGED')
+         FOR UPDATE
+    </select>
+
+    <insert id="insertIncident">
+        INSERT INTO alarm_incident(id, tenant_id, rule_id, organization_id, device_id, meter_id,
+                                   parameter_id, severity, state, trigger_value, latest_value,
+                                   occurrence_count, opened_at, last_observed_at, acknowledged_by,
+                                   acknowledged_at, cleared_at, version, updated_at)
+        VALUES (#{id}, #{tenantId}, #{ruleId}, #{organizationId}, #{deviceId}, #{meterId},
+                #{parameterId}, #{severity}, #{state}, #{triggerValue}, #{latestValue},
+                #{occurrenceCount}, #{openedAt}, #{lastObservedAt}, #{acknowledgedBy},
+                #{acknowledgedAt}, #{clearedAt}, #{version}, #{updatedAt})
+    </insert>
+
+    <update id="updateIncident">
+        UPDATE alarm_incident
+           SET state = #{incident.state}, latest_value = #{incident.latestValue},
+               occurrence_count = #{incident.occurrenceCount},
+               last_observed_at = #{incident.lastObservedAt},
+               acknowledged_by = #{incident.acknowledgedBy},
+               acknowledged_at = #{incident.acknowledgedAt}, cleared_at = #{incident.clearedAt},
+               version = #{incident.version}, updated_at = #{incident.updatedAt}
+         WHERE id = #{incident.id} AND version = #{expectedVersion}
+    </update>
+</mapper>

@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.AuthQueryMapper">
+    <select id="findCredential" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.AuthQueryMapper$CredentialRow">
+        SELECT a.id AS account_id,
+               a.password_hash,
+               a.session_generation,
+               a.status AS account_status,
+               COALESCE(ls.failed_attempts, 0) AS failed_attempts,
+               ls.locked_until,
+               mf.id AS mfa_factor_id,
+               mf.encrypted_secret
+          FROM account a
+          LEFT JOIN account_login_security ls ON ls.account_id = a.id
+          LEFT JOIN mfa_factor mf ON mf.account_id = a.id
+                                 AND mf.factor_type = 'TOTP'
+                                 AND mf.status = 'ACTIVE'
+         WHERE lower(a.login_name) = #{login}
+            OR lower(a.email) = #{login}
+         LIMIT 1
+    </select>
+
+    <select id="findCredentialById" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.AuthQueryMapper$CredentialRow">
+        SELECT a.id AS account_id,
+               a.password_hash,
+               a.session_generation,
+               a.status AS account_status,
+               COALESCE(ls.failed_attempts, 0) AS failed_attempts,
+               ls.locked_until,
+               mf.id AS mfa_factor_id,
+               mf.encrypted_secret
+          FROM account a
+          LEFT JOIN account_login_security ls ON ls.account_id = a.id
+          LEFT JOIN mfa_factor mf ON mf.account_id = a.id
+                                 AND mf.factor_type = 'TOTP'
+                                 AND mf.status = 'ACTIVE'
+                                 AND mf.encrypted_secret IS NOT NULL
+         WHERE a.id = #{accountId}
+    </select>
+
+    <select id="findTenantAuthorization" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.AuthQueryMapper$AuthorizationBaseRow">
+        SELECT CASE WHEN bool_or(r.role_type = 'ORGANIZATION_ADMIN')
+                    THEN 'ORGANIZATION_ADMIN' ELSE 'OPERATOR' END AS principal_type,
+               state.authorization_generation
+          FROM account_tenant_security_state state
+          JOIN account_membership membership
+            ON membership.tenant_id = state.tenant_id
+           AND membership.account_id = state.account_id
+           AND membership.status = 'ACTIVE'
+          LEFT JOIN membership_role mr
+            ON mr.tenant_id = membership.tenant_id AND mr.membership_id = membership.id
+          LEFT JOIN role r ON r.id = mr.role_id AND r.status = 'ACTIVE'
+         WHERE state.account_id = #{accountId}
+           AND state.tenant_id = #{tenantId}
+         GROUP BY state.authorization_generation
+    </select>
+
+    <select id="findPlatformAuthorization" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.AuthQueryMapper$AuthorizationBaseRow">
+        SELECT 'PLATFORM_ADMIN' AS principal_type,
+               a.authorization_generation
+          FROM account a
+         WHERE a.id = #{accountId}
+           AND a.status = 'ACTIVE'
+           AND EXISTS (
+               SELECT 1 FROM account_platform_role apr
+               JOIN role r ON r.id = apr.role_id
+               WHERE apr.account_id = a.id
+                 AND r.tenant_id IS NULL
+                 AND r.role_type = 'PLATFORM_ADMIN'
+                 AND r.status = 'ACTIVE'
+           )
+    </select>
+
+    <select id="findAllPermissions" resultType="string">
+        SELECT code FROM permission ORDER BY code
+    </select>
+
+    <select id="findTenantPermissions" resultType="string">
+        SELECT DISTINCT p.code
+          FROM permission p
+         WHERE p.tenant_assignable
+           AND (EXISTS (
+             SELECT 1 FROM account_membership membership
+             JOIN membership_role mr ON mr.tenant_id = membership.tenant_id AND mr.membership_id = membership.id
+             JOIN role r ON r.id = mr.role_id AND r.status = 'ACTIVE'
+             WHERE membership.account_id = #{accountId}
+               AND membership.tenant_id = #{tenantId}
+               AND membership.status = 'ACTIVE'
+               AND r.role_type = 'ORGANIZATION_ADMIN'
+         )
+            OR EXISTS (
+             SELECT 1 FROM account_membership membership
+             JOIN membership_role mr ON mr.tenant_id = membership.tenant_id AND mr.membership_id = membership.id
+             JOIN role r ON r.id = mr.role_id AND r.status = 'ACTIVE'
+             JOIN role_permission rp ON rp.role_id = r.id
+             WHERE membership.account_id = #{accountId}
+               AND membership.tenant_id = #{tenantId}
+               AND membership.status = 'ACTIVE'
+               AND rp.permission_id = p.id
+         ))
+         ORDER BY p.code
+    </select>
+
+    <select id="findOrganizationAdminPaths" resultType="string">
+        SELECT DISTINCT organization.path
+          FROM account_membership membership
+          JOIN organization ON organization.id = membership.organization_id
+                           AND organization.tenant_id = membership.tenant_id
+          JOIN membership_role mr ON mr.tenant_id = membership.tenant_id
+                                 AND mr.membership_id = membership.id
+          JOIN role ON role.id = mr.role_id
+                   AND role.status = 'ACTIVE'
+                   AND role.role_type = 'ORGANIZATION_ADMIN'
+         WHERE membership.account_id = #{accountId}
+           AND membership.tenant_id = #{tenantId}
+           AND membership.status = 'ACTIVE'
+         ORDER BY organization.path
+    </select>
+
+    <select id="findOperatorPermissionScopes" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.AuthQueryMapper$PermissionScopeRow">
+        SELECT DISTINCT organization.path AS organization_path, permission.code AS permission_code
+          FROM account_membership membership
+          JOIN organization ON organization.id = membership.organization_id
+                           AND organization.tenant_id = membership.tenant_id
+          JOIN membership_role mr ON mr.tenant_id = membership.tenant_id
+                                 AND mr.membership_id = membership.id
+          JOIN role ON role.id = mr.role_id
+                   AND role.status = 'ACTIVE'
+                   AND role.role_type = 'OPERATOR'
+          JOIN role_permission assignment ON assignment.role_id = role.id
+          JOIN permission ON permission.id = assignment.permission_id
+                         AND permission.tenant_assignable
+         WHERE membership.account_id = #{accountId}
+           AND membership.tenant_id = #{tenantId}
+           AND membership.status = 'ACTIVE'
+         ORDER BY organization.path, permission.code
+    </select>
+
+    <select id="findResourceGrants" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.identity.AuthQueryMapper$ResourceGrantRow">
+        SELECT DISTINCT grant.resource_type, grant.resource_id, grant.action
+          FROM resource_grant grant
+          JOIN account_membership membership ON membership.id = grant.membership_id
+                                            AND membership.tenant_id = grant.tenant_id
+         WHERE membership.account_id = #{accountId}
+           AND membership.tenant_id = #{tenantId}
+           AND membership.status = 'ACTIVE'
+           AND grant.effect = 'ALLOW'
+           AND grant.revoked_at IS NULL
+           AND (
+               EXISTS (
+                   SELECT 1
+                     FROM membership_role mr
+                     JOIN role ON role.id = mr.role_id
+                              AND role.status = 'ACTIVE'
+                              AND role.role_type = 'ORGANIZATION_ADMIN'
+                    WHERE mr.tenant_id = membership.tenant_id
+                      AND mr.membership_id = membership.id
+               )
+               OR EXISTS (
+                   SELECT 1
+                     FROM membership_role mr
+                     JOIN role ON role.id = mr.role_id
+                              AND role.status = 'ACTIVE'
+                              AND role.role_type = 'OPERATOR'
+                     JOIN role_permission assignment ON assignment.role_id = role.id
+                     JOIN permission ON permission.id = assignment.permission_id
+                                    AND permission.tenant_assignable
+                    WHERE mr.tenant_id = membership.tenant_id
+                      AND mr.membership_id = membership.id
+                      AND permission.code = grant.resource_type || ':' || lower(grant.action)
+               )
+           )
+    </select>
+
+    <insert id="recordLoginFailure">
+        INSERT INTO account_login_security(account_id, failed_attempts, locked_until, last_failed_at, updated_at)
+        VALUES (#{accountId}, 1, #{lockedUntil}, #{now}, #{now})
+        ON CONFLICT (account_id) DO UPDATE
+           SET failed_attempts = account_login_security.failed_attempts + 1,
+               locked_until = #{lockedUntil},
+               last_failed_at = #{now},
+               updated_at = #{now}
+    </insert>
+
+    <update id="clearLoginFailures">
+        UPDATE account_login_security
+           SET failed_attempts = 0, locked_until = NULL, updated_at = #{now}
+         WHERE account_id = #{accountId}
+    </update>
+
+    <update id="advanceSessionGeneration">
+        UPDATE account
+           SET session_generation = GREATEST(session_generation, #{generation}), updated_at = #{now}
+         WHERE id = #{accountId}
+    </update>
+</mapper>

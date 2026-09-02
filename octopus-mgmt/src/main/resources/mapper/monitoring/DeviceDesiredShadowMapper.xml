@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DeviceDesiredShadowMapper">
+    <sql id="desiredColumns">
+        request_id, tenant_id, organization_id, device_id, requested_by, idempotency_key,
+        expected_version, desired_version, desired_state::text AS desired_state_json,
+        request_sha256, command_id, status, failure_code, requested_at, expires_at,
+        applied_at, status_updated_at, projection_version
+    </sql>
+
+    <select id="findByIdempotency" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DeviceDesiredShadowMapper$DesiredRow">
+        SELECT <include refid="desiredColumns"/>
+          FROM device_desired_shadow_request
+         WHERE requested_by = #{requestedBy} AND idempotency_key = #{idempotencyKey}
+    </select>
+
+    <select id="findByIdempotencyForUpdate" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DeviceDesiredShadowMapper$DesiredRow">
+        SELECT <include refid="desiredColumns"/>
+          FROM device_desired_shadow_request
+         WHERE requested_by = #{requestedBy} AND idempotency_key = #{idempotencyKey}
+         FOR UPDATE
+    </select>
+
+    <select id="lockCurrent" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DeviceDesiredShadowMapper$CurrentRow">
+        SELECT tenant_id, device_id, desired_version, request_id,
+               desired_state::text AS desired_state_json, updated_at
+          FROM device_desired_shadow_current
+         WHERE device_id = #{deviceId}
+         FOR UPDATE
+    </select>
+
+    <select id="findCurrent" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DeviceDesiredShadowMapper$DesiredRow">
+        SELECT request.request_id, request.tenant_id, request.organization_id, request.device_id,
+               request.requested_by, request.idempotency_key, request.expected_version,
+               request.desired_version, request.desired_state::text AS desired_state_json,
+               request.request_sha256, request.command_id, request.status, request.failure_code,
+               request.requested_at, request.expires_at, request.applied_at,
+               request.status_updated_at, request.projection_version
+          FROM device_desired_shadow_current current_state
+          JOIN device_desired_shadow_request request
+            ON request.request_id = current_state.request_id
+           AND request.tenant_id = current_state.tenant_id
+         WHERE current_state.device_id = #{deviceId}
+    </select>
+
+    <select id="findByCommandForUpdate" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DeviceDesiredShadowMapper$DesiredRow">
+        SELECT <include refid="desiredColumns"/>
+          FROM device_desired_shadow_request
+         WHERE command_id = #{commandId}
+         FOR UPDATE
+    </select>
+
+    <select id="findCurrentRequestForUpdate" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.monitoring.DeviceDesiredShadowMapper$DesiredRow">
+        SELECT request.request_id, request.tenant_id, request.organization_id, request.device_id,
+               request.requested_by, request.idempotency_key, request.expected_version,
+               request.desired_version, request.desired_state::text AS desired_state_json,
+               request.request_sha256, request.command_id, request.status, request.failure_code,
+               request.requested_at, request.expires_at, request.applied_at,
+               request.status_updated_at, request.projection_version
+          FROM device_desired_shadow_current current_state
+          JOIN device_desired_shadow_request request
+            ON request.request_id = current_state.request_id
+           AND request.tenant_id = current_state.tenant_id
+         WHERE current_state.device_id = #{deviceId}
+         FOR UPDATE OF request
+    </select>
+
+    <insert id="insertRequest">
+        INSERT INTO device_desired_shadow_request(request_id, tenant_id, organization_id, device_id,
+               requested_by, idempotency_key, expected_version, desired_version, desired_state,
+               request_sha256, command_id, status, failure_code, requested_at, expires_at,
+               applied_at, status_updated_at, projection_version)
+        VALUES (#{requestId}, #{tenantId}, #{organizationId}, #{deviceId}, #{requestedBy},
+               #{idempotencyKey}, #{expectedVersion}, #{desiredVersion}, CAST(#{desiredStateJson} AS jsonb),
+               #{requestSha256}, #{commandId}, #{status}, #{failureCode}, #{requestedAt}, #{expiresAt},
+               #{appliedAt}, #{statusUpdatedAt}, #{projectionVersion})
+        ON CONFLICT (tenant_id, requested_by, idempotency_key) DO NOTHING
+    </insert>
+
+    <insert id="insertCurrent">
+        INSERT INTO device_desired_shadow_current(tenant_id, device_id, desired_version, request_id,
+                                                  desired_state, updated_at)
+        VALUES (#{tenantId}, #{deviceId}, #{desiredVersion}, #{requestId},
+                CAST(#{desiredStateJson} AS jsonb), #{updatedAt})
+        ON CONFLICT (tenant_id, device_id) DO NOTHING
+    </insert>
+
+    <update id="updateCurrent">
+        UPDATE device_desired_shadow_current
+           SET desired_version = #{current.desiredVersion}, request_id = #{current.requestId},
+               desired_state = CAST(#{current.desiredStateJson} AS jsonb),
+               updated_at = #{current.updatedAt}
+         WHERE device_id = #{current.deviceId} AND desired_version = #{expectedVersion}
+    </update>
+
+    <update id="markSuperseded">
+        UPDATE device_desired_shadow_request
+           SET status = 'SUPERSEDED', status_updated_at = #{at}, projection_version = projection_version + 1
+         WHERE request_id = #{requestId}
+           AND status NOT IN ('APPLIED', 'FAILED', 'EXPIRED', 'SUPERSEDED')
+    </update>
+
+    <update id="updateRequest">
+        UPDATE device_desired_shadow_request
+           SET status = #{request.status}, failure_code = #{request.failureCode},
+               applied_at = #{request.appliedAt}, status_updated_at = #{request.statusUpdatedAt},
+               projection_version = #{request.projectionVersion}
+         WHERE request_id = #{request.requestId}
+           AND projection_version = #{expectedProjectionVersion}
+    </update>
+</mapper>

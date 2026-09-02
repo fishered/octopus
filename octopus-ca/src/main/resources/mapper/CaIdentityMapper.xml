@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.ca.infrastructure.persistence.CaIdentityMapper">
+    <select id="countHardwareSerial" resultType="long">
+        SELECT count(*) FROM ca_device_identity WHERE hardware_serial = #{hardwareSerial}
+    </select>
+
+    <insert id="insertIdentity">
+        INSERT INTO ca_device_identity (identity_id, tenant_id, hardware_serial, manufacturer,
+            model_code, batch_code, bootstrap_public_key_fingerprint, status,
+            operational_certificate_serial, certificate_expires_at, claimed_at, version,
+            created_at, updated_at)
+        VALUES (#{identity.identityId}, #{identity.tenantId}, #{identity.hardwareSerial},
+            #{identity.manufacturer}, #{identity.modelCode}, #{identity.batchCode},
+            #{identity.bootstrapPublicKeyFingerprint}, #{identity.status},
+            #{identity.operationalCertificateSerial}, #{identity.certificateExpiresAt},
+            #{identity.claimedAt}, #{identity.version}, #{identity.createdAt}, #{identity.updatedAt})
+    </insert>
+
+    <insert id="insertBootstrap">
+        INSERT INTO ca_bootstrap_credential (identity_id, token_hash, status, expires_at, created_at)
+        VALUES (#{identityId}, #{tokenHash}, 'ACTIVE', #{expiresAt}, #{createdAt})
+    </insert>
+
+    <sql id="identityColumns">
+        identity_id, tenant_id, hardware_serial, manufacturer, model_code, batch_code,
+        bootstrap_public_key_fingerprint, status, operational_certificate_serial,
+        certificate_expires_at, claimed_at, version, created_at, updated_at
+    </sql>
+
+    <select id="findById" resultType="com.accuenergy.octopus.ca.infrastructure.persistence.CaIdentityMapper$IdentityRow">
+        SELECT <include refid="identityColumns"/> FROM ca_device_identity WHERE identity_id = #{identityId}
+    </select>
+
+    <select id="findForTenant" resultType="com.accuenergy.octopus.ca.infrastructure.persistence.CaIdentityMapper$IdentityRow">
+        SELECT <include refid="identityColumns"/> FROM ca_device_identity
+         WHERE identity_id = #{identityId} AND tenant_id = #{tenantId}
+    </select>
+
+    <select id="findForUpdate" resultType="com.accuenergy.octopus.ca.infrastructure.persistence.CaIdentityMapper$IdentityRow">
+        SELECT <include refid="identityColumns"/> FROM ca_device_identity
+         WHERE identity_id = #{identityId} FOR UPDATE
+    </select>
+
+    <update id="consumeBootstrap">
+        UPDATE ca_bootstrap_credential
+           SET status = 'USED', used_at = #{usedAt}
+         WHERE identity_id = #{identityId} AND token_hash = #{tokenHash}
+           AND status = 'ACTIVE' AND expires_at >= #{usedAt}
+    </update>
+
+    <update id="updateClaim">
+        UPDATE ca_device_identity
+           SET tenant_id = #{identity.tenantId}, status = #{identity.status},
+               claimed_at = #{identity.claimedAt}, updated_at = #{identity.updatedAt},
+               version = version + 1
+         WHERE identity_id = #{identity.identityId} AND version = #{expectedVersion}
+    </update>
+
+    <select id="findIssuedByIdempotency" resultType="com.accuenergy.octopus.ca.infrastructure.persistence.CaIdentityMapper$CertificateRow">
+        SELECT id, tenant_id, identity_id, serial_number, certificate_chain, csr_fingerprint,
+               idempotency_key, status, not_before, not_after, issued_at
+          FROM ca_operational_certificate
+         WHERE tenant_id = #{tenantId} AND identity_id = #{identityId}
+           AND idempotency_key = #{idempotencyKey}
+    </select>
+
+    <insert id="insertCertificate">
+        INSERT INTO ca_operational_certificate (id, tenant_id, identity_id, serial_number,
+            certificate_chain, csr_fingerprint, idempotency_key, status, not_before, not_after, issued_at)
+        VALUES (#{certificate.id}, #{certificate.tenantId}, #{certificate.identityId},
+            #{certificate.serialNumber}, #{certificate.certificateChain}, #{certificate.csrFingerprint},
+            #{certificate.idempotencyKey}, #{certificate.status}, #{certificate.notBefore},
+            #{certificate.notAfter}, #{certificate.issuedAt})
+    </insert>
+
+    <update id="supersedeActiveCertificates">
+        UPDATE ca_operational_certificate
+           SET status = 'SUPERSEDED', superseded_at = #{supersededAt}
+         WHERE tenant_id = #{tenantId} AND identity_id = #{identityId} AND status = 'ACTIVE'
+    </update>
+
+    <update id="updateIssuedIdentity">
+        UPDATE ca_device_identity
+           SET status = #{identity.status},
+               operational_certificate_serial = #{identity.operationalCertificateSerial},
+               certificate_expires_at = #{identity.certificateExpiresAt},
+               updated_at = #{identity.updatedAt}, version = version + 1
+         WHERE identity_id = #{identity.identityId} AND tenant_id = #{identity.tenantId}
+           AND version = #{expectedVersion}
+    </update>
+
+    <update id="revokeCertificates">
+        UPDATE ca_operational_certificate
+           SET status = 'REVOKED', revoked_at = #{revokedAt}, revoke_reason = #{reason}
+         WHERE tenant_id = #{tenantId} AND identity_id = #{identityId} AND status = 'ACTIVE'
+    </update>
+
+    <update id="updateRevokedIdentity">
+        UPDATE ca_device_identity
+           SET status = #{identity.status}, updated_at = #{identity.updatedAt}, version = version + 1
+         WHERE identity_id = #{identity.identityId} AND tenant_id = #{identity.tenantId}
+           AND version = #{expectedVersion}
+    </update>
+</mapper>

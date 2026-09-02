@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.catalog.DeviceTypeMapper">
+    <select id="countCode" resultType="long">
+        SELECT count(*) FROM device_type WHERE code = #{code}
+    </select>
+
+    <insert id="insertType">
+        INSERT INTO device_type (id, tenant_id, code, display_name, capabilities, status, created_at)
+        VALUES (#{deviceType.id}, #{deviceType.tenantId}, #{deviceType.code}, #{deviceType.displayName},
+                CAST(#{deviceType.capabilitiesDocument} AS jsonb), #{deviceType.status}, #{deviceType.createdAt})
+    </insert>
+
+    <select id="findType" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.catalog.DeviceTypeEntity">
+        SELECT id, tenant_id, code, display_name, capabilities::text AS capabilities_document,
+               status, created_at
+          FROM device_type
+         WHERE id = #{deviceTypeId}
+    </select>
+</mapper>

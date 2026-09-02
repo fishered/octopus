@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.control.infrastructure.persistence.command.DeviceCommandMapper">
+    <select id="find" resultType="com.accuenergy.octopus.control.infrastructure.persistence.command.DeviceCommandEntity">
+        SELECT command_id, tenant_id, device_id, requested_by, operation, payload, status,
+               failure_code, requested_at, expires_at, dispatched_at, acknowledged_at,
+               completed_at, version
+          FROM device_command
+         WHERE tenant_id = #{tenantId} AND command_id = #{commandId}
+    </select>
+
+    <insert id="insertCommand">
+        INSERT INTO device_command(command_id, tenant_id, device_id, requested_by, operation, payload,
+               status, failure_code, requested_at, expires_at, dispatched_at, acknowledged_at,
+               completed_at, version)
+        VALUES (#{commandId}, #{tenantId}, #{deviceId}, #{requestedBy}, #{operation}, #{payload},
+               #{status}, #{failureCode}, #{requestedAt}, #{expiresAt}, #{dispatchedAt},
+               #{acknowledgedAt}, #{completedAt}, #{version})
+    </insert>
+
+    <update id="updateCommand">
+        UPDATE device_command
+           SET status = #{command.status}, failure_code = #{command.failureCode},
+               dispatched_at = #{command.dispatchedAt}, acknowledged_at = #{command.acknowledgedAt},
+               completed_at = #{command.completedAt}, version = #{command.version}
+         WHERE command_id = #{command.commandId} AND version = #{expectedVersion}
+    </update>
+
+    <insert id="insertStatusOutbox">
+        INSERT INTO command_status_outbox(id, tenant_id, topic, partition_key, payload, status,
+                                          attempts, available_at, occurred_at)
+        VALUES (#{id}, #{tenantId}, #{topic}, #{partitionKey}, CAST(#{payload} AS jsonb),
+                'PENDING', 0, #{occurredAt}, #{occurredAt})
+    </insert>
+
+    <select id="tryAcquireRelayLock" resultType="boolean">
+        SELECT pg_try_advisory_xact_lock(689032041)
+    </select>
+
+    <select id="lockPending" resultType="com.accuenergy.octopus.control.infrastructure.persistence.command.DeviceCommandMapper$OutboxRow">
+        SELECT id, topic, partition_key, payload::text AS payload
+          FROM command_status_outbox
+         WHERE status = 'PENDING' AND available_at &lt;= now()
+         ORDER BY relay_sequence
+         FOR UPDATE SKIP LOCKED
+         LIMIT #{limit}
+    </select>
+
+    <update id="markPublished">
+        UPDATE command_status_outbox
+           SET status = 'PUBLISHED', published_at = #{publishedAt}, last_error = NULL
+         WHERE id = #{id} AND status = 'PENDING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE command_status_outbox
+           SET attempts = attempts + 1, last_error = #{lastError},
+               available_at = now() + make_interval(secs => LEAST(300, CAST(power(2, LEAST(attempts, 8)) AS integer)))
+         WHERE id = #{id} AND status = 'PENDING'
+    </update>
+</mapper>

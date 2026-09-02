@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.DeviceActualMapper">
+    <select id="findDeviceContext" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.DeviceActualMapper$DeviceContextRow">
+        SELECT device.tenant_id, organization.path AS organization_path
+          FROM device
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = device.tenant_id
+         WHERE device.id = #{deviceId} AND device.status = 'ACTIVE'
+    </select>
+
+    <select id="countCertificateUse" resultType="long">
+        SELECT count(*) FROM device_actual
+         WHERE certificate_id = #{certificateId}
+        <if test="excludingActualId != null">
+           AND id &lt;&gt; #{excludingActualId}
+        </if>
+    </select>
+
+    <select id="findDetailsByDeviceId" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.DeviceActualMapper$DeviceActualDetailsRow">
+        SELECT actual.id, actual.tenant_id, actual.device_id, actual.hardware_serial,
+               actual.manufacturer, actual.firmware_version, actual.certificate_id,
+               actual.connectivity_status, actual.last_seen_at, actual.commissioned_at,
+               actual.version, actual.created_at, actual.updated_at,
+               organization.path AS organization_path
+          FROM device_actual actual
+          JOIN device ON device.id = actual.device_id AND device.tenant_id = actual.tenant_id
+          JOIN organization ON organization.id = device.organization_id
+                           AND organization.tenant_id = device.tenant_id
+         WHERE actual.device_id = #{deviceId}
+    </select>
+</mapper>

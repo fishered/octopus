@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: octopus-control
+  aop:
+    proxy-target-class: false
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  kafka:
+    bootstrap-servers: ${OCTOPUS_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      enable-auto-commit: false
+      isolation-level: read_committed
+      auto-offset-reset: earliest
+      max-poll-records: 1
+    listener:
+      ack-mode: manual_immediate
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 30000
+  flyway:
+    enabled: true
+  datasource:
+    url: ${OCTOPUS_CONTROL_PG_URL:${OCTOPUS_PG_URL:jdbc:postgresql://localhost:5432/octopus_control}}
+    username: ${OCTOPUS_CONTROL_PG_USERNAME:${OCTOPUS_PG_USERNAME:octopus_app}}
+    password: ${OCTOPUS_CONTROL_PG_PASSWORD:${OCTOPUS_PG_PASSWORD:}}
+  data:
+    redis:
+      host: ${OCTOPUS_REDIS_HOST:localhost}
+      port: ${OCTOPUS_REDIS_PORT:6379}
+      password: ${OCTOPUS_REDIS_PASSWORD:}
+octopus:
+  environment: ${OCTOPUS_ENVIRONMENT:local}
+  iot:
+    default-plugin: ${OCTOPUS_IOT_DEFAULT_PLUGIN:mqtt-json}
+  kafka:
+    telemetry-raw-topic: ${OCTOPUS_TELEMETRY_RAW_TOPIC:octopus.local.telemetry.raw.v1}
+    telemetry-quarantine-topic: ${OCTOPUS_TELEMETRY_QUARANTINE_TOPIC:octopus.local.telemetry.quarantine.v1}
+    command-requested-topic: ${OCTOPUS_COMMAND_REQUESTED_TOPIC:octopus.local.command.requested.v1}
+    command-status-topic: ${OCTOPUS_COMMAND_STATUS_TOPIC:octopus.local.command.status.v1}
+    command-dispatch-group: ${OCTOPUS_COMMAND_DISPATCH_GROUP:octopus-control-command-v1}
+    shadow-reported-topic: ${OCTOPUS_SHADOW_REPORTED_TOPIC:octopus.local.shadow.reported.v1}
+    shadow-quarantine-topic: ${OCTOPUS_SHADOW_QUARANTINE_TOPIC:octopus.local.shadow.quarantine.v1}
+  presence:
+    lease-duration: ${OCTOPUS_DEVICE_PRESENCE_LEASE_DURATION:PT2M}
+  command-dispatch:
+    enabled: ${OCTOPUS_COMMAND_DISPATCH_ENABLED:false}
+  command:
+    status-outbox-batch-size: ${OCTOPUS_COMMAND_STATUS_OUTBOX_BATCH_SIZE:20}
+    status-outbox-poll-delay: ${OCTOPUS_COMMAND_STATUS_OUTBOX_POLL_DELAY:1000}
+  mqtt:
+    enabled: ${OCTOPUS_MQTT_ENABLED:false}
+    host: ${OCTOPUS_MQTT_HOST:localhost}
+    port: ${OCTOPUS_MQTT_PORT:1883}
+    client-id: ${OCTOPUS_MQTT_CLIENT_ID:${HOSTNAME:octopus-control}}
+    topic-filter: ${OCTOPUS_MQTT_TOPIC_FILTER:$share/octopus-control/octopus/+/devices/+/telemetry}
+    command-result-topic-filter: ${OCTOPUS_MQTT_COMMAND_RESULT_TOPIC_FILTER:$share/octopus-control/octopus/+/devices/+/command-results/+}
+    shadow-reported-topic-filter: ${OCTOPUS_MQTT_SHADOW_REPORTED_TOPIC_FILTER:$share/octopus-control/octopus/+/devices/+/shadow/reported}
+    persistence-directory: ${OCTOPUS_MQTT_PERSISTENCE_DIRECTORY:/tmp/octopus-mqtt}
+    keep-alive-seconds: ${OCTOPUS_MQTT_KEEP_ALIVE_SECONDS:30}
+    max-inflight: ${OCTOPUS_MQTT_MAX_INFLIGHT:1000}
+    username: ${OCTOPUS_MQTT_USERNAME:}
+    password: ${OCTOPUS_MQTT_PASSWORD:}
+    tls:
+      enabled: ${OCTOPUS_MQTT_TLS_ENABLED:false}
+      key-store: ${OCTOPUS_MQTT_KEY_STORE:}
+      key-store-password: ${OCTOPUS_MQTT_KEY_STORE_PASSWORD:}
+      trust-store: ${OCTOPUS_MQTT_TRUST_STORE:}
+      trust-store-password: ${OCTOPUS_MQTT_TRUST_STORE_PASSWORD:}
+server.shutdown: graceful
+management.endpoint.health.probes.enabled: true
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true

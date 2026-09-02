@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata: { name: octopus-mgmt, namespace: octopus }
+spec:
+  selector: { app.kubernetes.io/name: octopus-mgmt }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: octopus-ca, namespace: octopus }
+spec:
+  selector: { app.kubernetes.io/name: octopus-ca }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: octopus-control, namespace: octopus }
+spec:
+  selector: { app.kubernetes.io/name: octopus-control }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: octopus-control-headless, namespace: octopus }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app.kubernetes.io/name: octopus-control }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: octopus-agent, namespace: octopus }
+spec:
+  selector: { app.kubernetes.io/name: octopus-agent }
+  ports: [{ name: http, port: 80, targetPort: http }]

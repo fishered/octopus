@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.DeviceConnectorBindingMapper">
+    <select id="find" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.DeviceConnectorBindingMapper$BindingRow">
+        SELECT tenant_id, device_id, plugin_id, codec_id, config_ref, status, version, created_at, updated_at
+          FROM device_connector_binding WHERE device_id = #{deviceId}
+    </select>
+    <insert id="insert">
+        INSERT INTO device_connector_binding(tenant_id, device_id, plugin_id, codec_id, config_ref, status, version, created_at, updated_at)
+        VALUES (#{binding.tenantId}, #{binding.deviceId}, #{binding.pluginId}, #{binding.codecId}, #{binding.configRef},
+                #{binding.status}, #{binding.version}, #{binding.createdAt}, #{binding.updatedAt})
+    </insert>
+    <update id="update">
+        UPDATE device_connector_binding SET plugin_id=#{binding.pluginId}, codec_id=#{binding.codecId},
+               config_ref=#{binding.configRef}, status=#{binding.status}, version=#{binding.version}, updated_at=#{binding.updatedAt}
+         WHERE tenant_id=#{binding.tenantId} AND device_id=#{binding.deviceId} AND version=#{expectedVersion}
+    </update>
+</mapper>

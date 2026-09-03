@@ -5,6 +5,8 @@ import com.accuenergy.octopus.mgmt.application.asset.DeviceManagementService;
 import com.accuenergy.octopus.mgmt.application.asset.DeviceRepository;
 import com.accuenergy.octopus.mgmt.application.asset.DeviceActualManagementService;
 import com.accuenergy.octopus.mgmt.application.asset.DeviceActualRepository;
+import com.accuenergy.octopus.mgmt.application.asset.DeviceConnectorBindingManagementService;
+import com.accuenergy.octopus.mgmt.application.asset.DeviceConnectorBindingRepository;
 import com.accuenergy.octopus.mgmt.application.asset.FacilityManagementService;
 import com.accuenergy.octopus.mgmt.application.asset.FacilityRepository;
 import com.accuenergy.octopus.mgmt.application.monitoring.DeviceMonitoringService;
@@ -32,6 +34,9 @@ public class AssetConfiguration {
     @Bean DeviceActualManagementService deviceActualManagementService(DeviceActualRepository actuals,
             AuthorizationPolicy authorization, Clock clock) {
         return new DeviceActualManagementService(actuals, authorization, clock);
+    }
+    @Bean DeviceConnectorBindingManagementService deviceConnectorBindingManagementService(DeviceConnectorBindingRepository bindings, DeviceActualRepository devices, AuthorizationPolicy authorization, Clock clock) {
+        return new DeviceConnectorBindingManagementService(bindings, devices, authorization, clock);
     }
     @Bean DeviceMonitoringService deviceMonitoringService(DeviceRepository devices,
             DevicePresenceRepository presence, DeviceShadowRepository shadows,

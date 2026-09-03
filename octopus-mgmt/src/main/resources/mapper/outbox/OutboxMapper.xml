@@ -1,30 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.outbox.OutboxMapper">
-    <select id="tryAcquireRelayLock" resultType="boolean">
-        SELECT pg_try_advisory_xact_lock(689032040)
-    </select>
-
+    <select id="tryAcquireRelayLock" resultType="boolean">SELECT pg_try_advisory_xact_lock(689032040)</select>
     <select id="lockPending" resultType="com.accuenergy.octopus.mgmt.infrastructure.outbox.OutboxMapper$OutboxRow">
-        SELECT id, topic, partition_key, payload::text AS payload
-          FROM integration_outbox
-         WHERE status = 'PENDING' AND available_at &lt;= now()
-         ORDER BY relay_sequence
-         FOR UPDATE SKIP LOCKED
-         LIMIT #{limit}
+        SELECT id, topic, partition_key, payload::text AS payload FROM integration_outbox
+         WHERE status = 'PENDING' AND available_at &lt;= now() ORDER BY relay_sequence
+         FOR UPDATE SKIP LOCKED LIMIT #{limit}
     </select>
-
-    <update id="markPublished">
-        UPDATE integration_outbox
-           SET status = 'PUBLISHED', published_at = #{publishedAt}, last_error = NULL
-         WHERE id = #{id} AND status = 'PENDING'
-    </update>
-
-    <update id="markFailed">
-        UPDATE integration_outbox
-           SET attempts = attempts + 1,
-               last_error = #{lastError},
-               available_at = now() + make_interval(secs => LEAST(300, CAST(power(2, LEAST(attempts, 8)) AS integer)))
-         WHERE id = #{id} AND status = 'PENDING'
-    </update>
+    <update id="markPublished">UPDATE integration_outbox SET status='PUBLISHED', published_at=#{publishedAt}, last_error=NULL WHERE id=#{id} AND status='PENDING'</update>
+    <update id="markFailed">UPDATE integration_outbox SET attempts=attempts+1, last_error=#{lastError},
+        available_at=now()+make_interval(secs =&gt; LEAST(300, CAST(power(2, LEAST(attempts,8)) AS integer)))
+        WHERE id=#{id} AND status='PENDING'</update>
+    <insert id="insertOutbox">
+        INSERT INTO integration_outbox(id, tenant_id, topic, partition_key, event_type, payload, status, attempts, available_at, occurred_at)
+        VALUES (#{id}, #{tenantId}, #{topic}, #{partitionKey}, #{eventType}, CAST(#{payload} AS jsonb), 'PENDING', 0, #{occurredAt}, #{occurredAt})
+    </insert>
 </mapper>

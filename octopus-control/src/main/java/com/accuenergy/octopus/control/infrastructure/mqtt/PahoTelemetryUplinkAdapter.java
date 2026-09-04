@@ -1,8 +1,7 @@
 package com.accuenergy.octopus.control.infrastructure.mqtt;
 
-import com.accuenergy.octopus.control.application.TelemetryIngressService;
-import com.accuenergy.octopus.control.application.DeviceShadowIngressService;
-import com.accuenergy.octopus.control.domain.shadow.DeviceShadowTopic;
+import com.accuenergy.octopus.iot.spi.InboundMessage;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
@@ -18,33 +17,27 @@ import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
 /** MQTT source; PUBACK/PUBCOMP is sent only after Kafka acknowledges raw or quarantine storage. */
-@Component
 @ConditionalOnProperty(prefix = "octopus.mqtt", name = "enabled", havingValue = "true")
 public final class PahoTelemetryUplinkAdapter implements SmartLifecycle, MqttCallbackExtended {
     private static final Logger log = LoggerFactory.getLogger(PahoTelemetryUplinkAdapter.class);
     private final MqttAsyncClient client;
     private final MqttConnectOptions connectOptions;
-    private final TelemetryIngressService ingress;
+    private final InboundMessageDispatcher dispatcher;
     private final String topicFilter;
     private final String commandResultFilter;
     private final String shadowReportedFilter;
-    private final PahoCommandResultHandler commandResults;
-    private final DeviceShadowIngressService shadows;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicInteger inFlight = new AtomicInteger();
     private final Object drainMonitor = new Object();
 
     public PahoTelemetryUplinkAdapter(MqttAsyncClient client, MqttConnectOptions connectOptions,
-            TelemetryIngressService ingress, PahoCommandResultHandler commandResults,
-            DeviceShadowIngressService shadows,
+            InboundMessageDispatcher dispatcher,
             @Value("${octopus.mqtt.topic-filter}") String topicFilter,
             @Value("${octopus.mqtt.command-result-topic-filter}") String commandResultFilter,
             @Value("${octopus.mqtt.shadow-reported-topic-filter}") String shadowReportedFilter) {
         this.client = client;
         this.connectOptions = connectOptions;
-        this.ingress = ingress;
-        this.commandResults = commandResults;
-        this.shadows = shadows;
+        this.dispatcher = dispatcher;
         this.topicFilter = topicFilter;
         this.commandResultFilter = commandResultFilter;
         this.shadowReportedFilter = shadowReportedFilter;
@@ -69,17 +62,10 @@ public final class PahoTelemetryUplinkAdapter implements SmartLifecycle, MqttCal
 
     @Override
     public void messageArrived(String topic, MqttMessage message) {
-        if (commandResults.supports(topic)) {
-            handleCommandResult(topic, message);
-            return;
-        }
-        if (DeviceShadowTopic.matches(topic)) {
-            handleShadowReport(topic, message);
-            return;
-        }
         inFlight.incrementAndGet();
-        var metadata = new TelemetryIngressService.UplinkMetadata(topic, message.getQos(), message.isRetained());
-        ingress.ingest(message.getPayload(), metadata).whenComplete((outcome, failure) -> {
+        InboundMessage inbound = new InboundMessage("mqtt", topic, message.getPayload(), message.getQos(),
+                message.isRetained(), Instant.now(), "application/json");
+        dispatcher.dispatch(inbound).whenComplete((ignored, failure) -> {
             try {
                 if (failure == null) {
                     if (message.getQos() > 0) {
@@ -91,41 +77,6 @@ public final class PahoTelemetryUplinkAdapter implements SmartLifecycle, MqttCal
             } catch (Exception acknowledgementFailure) {
                     log.warn("Unable to acknowledge MQTT message {} on {}; broker will redeliver",
                             message.getId(), topic, acknowledgementFailure);
-            } finally {
-                if (inFlight.decrementAndGet() == 0) {
-                    synchronized (drainMonitor) { drainMonitor.notifyAll(); }
-                }
-            }
-        });
-    }
-
-    private void handleCommandResult(String topic, MqttMessage message) {
-        inFlight.incrementAndGet();
-        try {
-            commandResults.handle(topic, message.getPayload());
-            if (message.getQos() > 0) client.messageArrivedComplete(message.getId(), message.getQos());
-        } catch (Exception failure) {
-            log.warn("Command result persistence failed for {}; broker acknowledgement withheld", topic, failure);
-        } finally {
-            if (inFlight.decrementAndGet() == 0) {
-                synchronized (drainMonitor) { drainMonitor.notifyAll(); }
-            }
-        }
-    }
-
-    private void handleShadowReport(String topic, MqttMessage message) {
-        inFlight.incrementAndGet();
-        var metadata = new DeviceShadowIngressService.UplinkMetadata(topic, message.getQos(), message.isRetained());
-        shadows.ingest(message.getPayload(), metadata).whenComplete((outcome, failure) -> {
-            try {
-                if (failure == null) {
-                    if (message.getQos() > 0) client.messageArrivedComplete(message.getId(), message.getQos());
-                } else {
-                    log.warn("Kafka shadow handoff failed for {}; broker acknowledgement withheld", topic, failure);
-                }
-            } catch (Exception acknowledgementFailure) {
-                log.warn("Unable to acknowledge shadow report {} on {}; broker will redeliver",
-                        message.getId(), topic, acknowledgementFailure);
             } finally {
                 if (inFlight.decrementAndGet() == 0) {
                     synchronized (drainMonitor) { drainMonitor.notifyAll(); }

@@ -17,6 +17,8 @@ import com.accuenergy.octopus.iot.spi.DeviceTransportPlugin;
 import com.accuenergy.octopus.iot.spi.DeviceTransportPluginRegistry;
 import com.accuenergy.octopus.iot.spi.DeviceBindingResolver;
 import com.accuenergy.octopus.iot.spi.DeviceTransportRouter;
+import com.accuenergy.octopus.iot.spi.ProtocolCodec;
+import com.accuenergy.octopus.iot.spi.ProtocolCodecRegistry;
 import com.accuenergy.octopus.iot.spi.MessageKind;
 import com.accuenergy.octopus.iot.spi.OutboundMessage;
 import com.accuenergy.octopus.iot.spi.PublishReceipt;
@@ -39,6 +41,11 @@ public class ControlConfiguration {
     }
 
     @Bean
+    ProtocolCodecRegistry protocolCodecRegistry(List<ProtocolCodec> codecs) {
+        return new ProtocolCodecRegistry(codecs);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(DeviceBindingResolver.class)
     DeviceBindingResolver emptyDeviceBindingResolver() {
         return (tenantId, deviceId) -> java.util.Optional.empty();
@@ -47,8 +54,9 @@ public class ControlConfiguration {
     @Bean
     DeviceTransportRouter deviceTransportRouter(DeviceTransportPluginRegistry registry,
             DeviceBindingResolver bindings,
+            ProtocolCodecRegistry codecs,
             @Value("${octopus.iot.default-plugin:mqtt-json}") String defaultPlugin) {
-        return new DeviceTransportRouter(registry, bindings, defaultPlugin);
+        return new DeviceTransportRouter(registry, bindings, codecs, defaultPlugin);
     }
 
     @Bean

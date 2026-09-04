@@ -26,14 +26,14 @@ public final class RedisDeviceBindingResolver implements DeviceBindingResolver {
             @Value("$"+"{octopus.environment:local}") String environment) { this.redis=redis; this.json=json; this.environment=environment; }
     @Override public Optional<DeviceBinding> find(UUID tenantId, UUID deviceId) {
         Map<Object,Object> values=redis.opsForHash().entries(key(tenantId,deviceId)); if(values.isEmpty()) return Optional.empty();
-        if ("DISABLED".equals(String.valueOf(values.get("status")))) return Optional.empty();
         Object payload=values.get("payload"); if(payload==null) return Optional.empty();
         try { return Optional.of(json.readValue(payload.toString(), DeviceBinding.class)); }
         catch(Exception e) { throw new IllegalStateException("Invalid cached device binding",e); }
     }
     public void apply(DeviceConnectorBindingChanged event) {
         try {
-            String payload=json.writeValueAsString(new DeviceBinding(event.tenantId(),event.deviceId(),event.pluginId(),event.codecId(),event.bindingVersion()));
+            String payload=json.writeValueAsString(new DeviceBinding(event.tenantId(),event.deviceId(),event.pluginId(),event.codecId(),
+                    DeviceBinding.Status.valueOf(event.status()), event.bindingVersion()));
             redis.execute(APPLY_IF_NEWER,List.of(key(event.tenantId(),event.deviceId())),Long.toString(event.bindingVersion()),payload,event.status());
         } catch(Exception e) { throw new IllegalStateException("Unable to cache device binding",e); }
     }

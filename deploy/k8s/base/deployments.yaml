@@ -13,16 +13,20 @@ spec:
         - { maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app.kubernetes.io/name: octopus-mgmt } } }
       containers:
         - name: app
-          image: registry.example.com/octopus/octopus-mgmt:0.1.0
+          image: registry.example.com/octopus/octopus-mgmt:1.0.0
           ports: [{ name: http, containerPort: 8080 }]
           envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
-          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: jwt-keys, mountPath: /run/secrets/octopus-jwt, readOnly: true }
           resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "2", memory: 1Gi } }
           startupProbe: &startup { httpGet: { path: /actuator/health/liveness, port: http }, failureThreshold: 30, periodSeconds: 5 }
           readinessProbe: &ready { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
           livenessProbe: &live { httpGet: { path: /actuator/health/liveness, port: http }, periodSeconds: 10, timeoutSeconds: 2, failureThreshold: 3 }
           securityContext: &containerSecurity { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-      volumes: [{ name: tmp, emptyDir: { medium: Memory, sizeLimit: 128Mi } }]
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 128Mi } }
+        - { name: jwt-keys, secret: { secretName: octopus-jwt } }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -39,7 +43,7 @@ spec:
         - { maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app.kubernetes.io/name: octopus-collect } } }
       containers:
         - name: app
-          image: registry.example.com/octopus/octopus-collect:0.1.0
+          image: registry.example.com/octopus/octopus-collect:1.0.0
           ports: [{ name: http, containerPort: 8080 }]
           envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
           volumeMounts: [{ name: tmp, mountPath: /tmp }]
@@ -65,7 +69,7 @@ spec:
       securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: app
-          image: registry.example.com/octopus/octopus-control:0.1.0
+          image: registry.example.com/octopus/octopus-control:1.0.0
           ports: [{ name: http, containerPort: 8080 }]
           envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
           volumeMounts:
@@ -93,7 +97,7 @@ spec:
       securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: app
-          image: registry.example.com/octopus/octopus-ca:0.1.0
+          image: registry.example.com/octopus/octopus-ca:1.0.0
           ports: [{ name: http, containerPort: 8080 }]
           envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
           volumeMounts:
@@ -121,7 +125,7 @@ spec:
       securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: app
-          image: registry.example.com/octopus/octopus-agent:0.1.0
+          image: registry.example.com/octopus/octopus-agent:1.0.0
           ports: [{ name: http, containerPort: 8080 }]
           envFrom: [{ configMapRef: { name: octopus-config } }, { secretRef: { name: octopus-secrets } }]
           volumeMounts: [{ name: tmp, mountPath: /tmp }]

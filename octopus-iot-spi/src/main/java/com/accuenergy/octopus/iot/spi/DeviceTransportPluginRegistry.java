@@ -19,6 +19,13 @@ public final class DeviceTransportPluginRegistry {
                 (left, right) -> { throw new IllegalArgumentException("Duplicate IoT plugin: " + left.descriptor().pluginId()); }));
     }
 
+    public DeviceTransportPluginRegistry(List<? extends DeviceTransportPlugin> plugins,
+            ProtocolCodecRegistry codecs) {
+        this(plugins);
+        Objects.requireNonNull(codecs, "codecs");
+        this.plugins.values().forEach(plugin -> plugin.descriptor().codecIds().forEach(codecs::require));
+    }
+
     public Optional<DeviceTransportPlugin> find(String pluginId) { return Optional.ofNullable(plugins.get(pluginId)); }
 
     public DeviceTransportPlugin require(String pluginId) {

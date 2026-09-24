@@ -16,9 +16,9 @@ public final class ClaimDeviceIdentityService {
         this.clock = clock;
     }
 
-    public DeviceIdentity claim(UUID identityId, UUID tenantId, String bootstrapToken) {
+    public DeviceIdentity claim(UUID identityId, UUID tenantId, UUID deviceId, String bootstrapToken) {
         String tokenHash = tokens.hash(bootstrapToken);
-        return identities.claim(identityId, tokenHash, tenantId, clock.instant())
+        return identities.claim(identityId, tokenHash, tenantId, deviceId, clock.instant())
                 .orElseThrow(() -> new SecurityException("Bootstrap credential is invalid, expired, or already used"));
     }
 }

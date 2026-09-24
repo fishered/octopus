@@ -6,11 +6,11 @@
     </select>
 
     <insert id="insertIdentity">
-        INSERT INTO ca_device_identity (identity_id, tenant_id, hardware_serial, manufacturer,
+        INSERT INTO ca_device_identity (identity_id, tenant_id, device_id, hardware_serial, manufacturer,
             model_code, batch_code, bootstrap_public_key_fingerprint, status,
             operational_certificate_serial, certificate_expires_at, claimed_at, version,
             created_at, updated_at)
-        VALUES (#{identity.identityId}, #{identity.tenantId}, #{identity.hardwareSerial},
+        VALUES (#{identity.identityId}, #{identity.tenantId}, #{identity.deviceId}, #{identity.hardwareSerial},
             #{identity.manufacturer}, #{identity.modelCode}, #{identity.batchCode},
             #{identity.bootstrapPublicKeyFingerprint}, #{identity.status},
             #{identity.operationalCertificateSerial}, #{identity.certificateExpiresAt},
@@ -23,7 +23,7 @@
     </insert>
 
     <sql id="identityColumns">
-        identity_id, tenant_id, hardware_serial, manufacturer, model_code, batch_code,
+        identity_id, tenant_id, device_id, hardware_serial, manufacturer, model_code, batch_code,
         bootstrap_public_key_fingerprint, status, operational_certificate_serial,
         certificate_expires_at, claimed_at, version, created_at, updated_at
     </sql>
@@ -51,7 +51,7 @@
 
     <update id="updateClaim">
         UPDATE ca_device_identity
-           SET tenant_id = #{identity.tenantId}, status = #{identity.status},
+           SET tenant_id = #{identity.tenantId}, device_id = #{identity.deviceId}, status = #{identity.status},
                claimed_at = #{identity.claimedAt}, updated_at = #{identity.updatedAt},
                version = version + 1
          WHERE identity_id = #{identity.identityId} AND version = #{expectedVersion}
@@ -63,6 +63,19 @@
           FROM ca_operational_certificate
          WHERE tenant_id = #{tenantId} AND identity_id = #{identityId}
            AND idempotency_key = #{idempotencyKey}
+    </select>
+
+    <select id="findCertificateAuthorization"
+            resultType="com.accuenergy.octopus.ca.infrastructure.persistence.CaIdentityMapper$CertificateAuthorizationRow">
+        SELECT certificate.tenant_id, identity.device_id, certificate.serial_number, certificate.not_after
+          FROM ca_operational_certificate certificate
+          JOIN ca_device_identity identity ON identity.identity_id = certificate.identity_id
+                                           AND identity.tenant_id = certificate.tenant_id
+         WHERE certificate.serial_number = #{certificateSerial}
+           AND certificate.status = 'ACTIVE'
+           AND certificate.not_before &lt;= #{now}
+           AND certificate.not_after &gt; #{now}
+           AND identity.status = 'ACTIVE'
     </select>
 
     <insert id="insertCertificate">

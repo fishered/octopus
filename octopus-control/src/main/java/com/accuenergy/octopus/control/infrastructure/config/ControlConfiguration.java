@@ -36,13 +36,14 @@ public class ControlConfiguration {
     @Bean Clock clock() { return Clock.systemUTC(); }
 
     @Bean
-    DeviceTransportPluginRegistry deviceTransportPluginRegistry(List<DeviceTransportPlugin> plugins) {
-        return new DeviceTransportPluginRegistry(plugins);
+    ProtocolCodecRegistry protocolCodecRegistry(List<ProtocolCodec> codecs) {
+        return new ProtocolCodecRegistry(codecs);
     }
 
     @Bean
-    ProtocolCodecRegistry protocolCodecRegistry(List<ProtocolCodec> codecs) {
-        return new ProtocolCodecRegistry(codecs);
+    DeviceTransportPluginRegistry deviceTransportPluginRegistry(List<DeviceTransportPlugin> plugins,
+            ProtocolCodecRegistry codecs) {
+        return new DeviceTransportPluginRegistry(plugins, codecs);
     }
 
     @Bean

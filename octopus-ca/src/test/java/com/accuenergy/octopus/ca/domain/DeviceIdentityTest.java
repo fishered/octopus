@@ -15,12 +15,14 @@ class DeviceIdentityTest {
                 "MODEL-1", "BATCH-1", "sha256:fingerprint", now);
         identity.enableBootstrap(now);
         UUID tenantId = UUID.randomUUID();
-        identity.claim(tenantId, now);
+        UUID deviceId = UUID.randomUUID();
+        identity.claim(tenantId, deviceId, now);
         identity.activate("CERT-1", now.plusSeconds(3600), now);
         identity.revoke(now);
 
         assertEquals(DeviceIdentity.Status.REVOKED, identity.status());
         assertEquals(tenantId, identity.tenantId().orElseThrow());
+        assertEquals(deviceId, identity.deviceId().orElseThrow());
     }
 
     @Test
@@ -29,8 +31,9 @@ class DeviceIdentityTest {
         var identity = DeviceIdentity.manufacture(UUID.randomUUID(), "SERIAL-2", "Octopus",
                 "MODEL-1", "BATCH-1", "sha256:fingerprint", now);
         identity.enableBootstrap(now);
-        identity.claim(UUID.randomUUID(), now);
-        assertThrows(IllegalStateException.class, () -> identity.claim(UUID.randomUUID(), now));
+        identity.claim(UUID.randomUUID(), UUID.randomUUID(), now);
+        assertThrows(IllegalStateException.class,
+                () -> identity.claim(UUID.randomUUID(), UUID.randomUUID(), now));
         assertThrows(IllegalArgumentException.class, () -> identity.activate("CERT-2", now, now));
     }
 }

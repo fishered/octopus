@@ -15,6 +15,7 @@ public final class DeviceIdentity {
     private final String bootstrapPublicKeyFingerprint;
     private Status status;
     private UUID tenantId;
+    private UUID deviceId;
     private String operationalCertificateSerial;
     private Instant certificateExpiresAt;
     private Instant claimedAt;
@@ -24,7 +25,7 @@ public final class DeviceIdentity {
 
     private DeviceIdentity(UUID identityId, String hardwareSerial, String manufacturer,
                            String modelCode, String batchCode, String bootstrapPublicKeyFingerprint,
-                           Status status, UUID tenantId, String operationalCertificateSerial,
+                           Status status, UUID tenantId, UUID deviceId, String operationalCertificateSerial,
                            Instant certificateExpiresAt, Instant claimedAt, long version,
                            Instant createdAt, Instant updatedAt) {
         this.identityId = Objects.requireNonNull(identityId, "identityId");
@@ -36,6 +37,7 @@ public final class DeviceIdentity {
                 "bootstrapPublicKeyFingerprint", 128);
         this.status = Objects.requireNonNull(status, "status");
         this.tenantId = tenantId;
+        this.deviceId = deviceId;
         this.operationalCertificateSerial = normalize(operationalCertificateSerial);
         this.certificateExpiresAt = certificateExpiresAt;
         this.claimedAt = claimedAt;
@@ -50,17 +52,17 @@ public final class DeviceIdentity {
                                              String modelCode, String batchCode,
                                              String bootstrapPublicKeyFingerprint, Instant now) {
         return new DeviceIdentity(identityId, hardwareSerial, manufacturer, modelCode, batchCode,
-                bootstrapPublicKeyFingerprint, Status.MANUFACTURED, null, null, null, null,
+                bootstrapPublicKeyFingerprint, Status.MANUFACTURED, null, null, null, null, null,
                 0, now, now);
     }
 
     public static DeviceIdentity restore(UUID identityId, String hardwareSerial, String manufacturer,
                                          String modelCode, String batchCode,
                                          String bootstrapPublicKeyFingerprint, Status status, UUID tenantId,
-                                         String operationalCertificateSerial, Instant certificateExpiresAt,
+                                         UUID deviceId, String operationalCertificateSerial, Instant certificateExpiresAt,
                                          Instant claimedAt, long version, Instant createdAt, Instant updatedAt) {
         return new DeviceIdentity(identityId, hardwareSerial, manufacturer, modelCode, batchCode,
-                bootstrapPublicKeyFingerprint, status, tenantId, operationalCertificateSerial,
+                bootstrapPublicKeyFingerprint, status, tenantId, deviceId, operationalCertificateSerial,
                 certificateExpiresAt, claimedAt, version, createdAt, updatedAt);
     }
 
@@ -70,9 +72,10 @@ public final class DeviceIdentity {
         updatedAt = Objects.requireNonNull(now, "now");
     }
 
-    public void claim(UUID newTenantId, Instant now) {
+    public void claim(UUID newTenantId, UUID newDeviceId, Instant now) {
         require(Status.BOOTSTRAP_READY);
         tenantId = Objects.requireNonNull(newTenantId, "newTenantId");
+        deviceId = Objects.requireNonNull(newDeviceId, "newDeviceId");
         claimedAt = Objects.requireNonNull(now, "now");
         updatedAt = now;
         status = Status.CLAIMED;
@@ -116,6 +119,7 @@ public final class DeviceIdentity {
     public String bootstrapPublicKeyFingerprint() { return bootstrapPublicKeyFingerprint; }
     public Status status() { return status; }
     public Optional<UUID> tenantId() { return Optional.ofNullable(tenantId); }
+    public Optional<UUID> deviceId() { return Optional.ofNullable(deviceId); }
     public Optional<String> operationalCertificateSerial() { return Optional.ofNullable(operationalCertificateSerial); }
     public Optional<Instant> certificateExpiresAt() { return Optional.ofNullable(certificateExpiresAt); }
     public Optional<Instant> claimedAt() { return Optional.ofNullable(claimedAt); }
@@ -124,10 +128,10 @@ public final class DeviceIdentity {
     public Instant updatedAt() { return updatedAt; }
 
     private void validateState() {
-        boolean claimed = tenantId != null && claimedAt != null;
+        boolean claimed = tenantId != null && deviceId != null && claimedAt != null;
         if ((status == Status.CLAIMED || status == Status.ACTIVE || status == Status.REVOKED
                 || status == Status.DECOMMISSIONED) && !claimed) {
-            throw new IllegalArgumentException("Claimed lifecycle state requires tenant and claimedAt");
+            throw new IllegalArgumentException("Claimed lifecycle state requires tenant, device, and claimedAt");
         }
         if (status == Status.ACTIVE && (operationalCertificateSerial == null || certificateExpiresAt == null)) {
             throw new IllegalArgumentException("Active identity requires an operational certificate");

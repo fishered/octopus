@@ -1,6 +1,8 @@
 package com.accuenergy.octopus.iot.spi;
 
+import java.util.concurrent.CompletionStage;
+
 @FunctionalInterface
 public interface InboundMessageHandler {
-    void onMessage(InboundMessage message) throws Exception;
+    CompletionStage<Void> onMessage(InboundMessage message);
 }

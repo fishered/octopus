@@ -1,7 +1,8 @@
 # Device certificate lifecycle
 
 Octopus uses a two-stage identity so a factory credential is not a permanent production
-credential.
+credential. The numbered flow is the target lifecycle; the v1.0 implementation boundary
+is stated explicitly below.
 
 1. Manufacturing creates a device identity and hardware-bound key where possible (TPM,
    secure element, or protected keystore). The private key never leaves the device.
@@ -32,13 +33,15 @@ domain identity and claim state do not depend on AWS resource identifiers.
 
 - Manufacturing creates a `ca_device_identity` and a 256-bit one-time bootstrap token.
   The raw token is returned once; PostgreSQL stores only an HMAC-SHA256 digest and expiry.
-- Claiming requires a verified tenant JWT plus the bootstrap token. A platform-scoped RLS
-  transaction locks the identity, atomically consumes the token, and binds exactly one tenant.
+- Claiming requires a verified tenant JWT, the logical `deviceId`, and the bootstrap token.
+  A platform-scoped RLS transaction locks the identity, atomically consumes the token, and
+  binds exactly one tenant and logical device.
 - Certificate issuance verifies the PKCS#10 CSR signature, requires an idempotency key,
-  adds tenant and identity URIs to SAN, and persists the certificate and identity update in
+  adds tenant, logical-device, and identity URIs to SAN, and persists the certificate and identity update in
   one tenant transaction.
 - Issuance returns a stable `certificateId` UUID used by `device_actual.certificate_id`;
-  retries with the same idempotency key return the same certificate.
+  retries with the same idempotency key and CSR return the same certificate. Reusing the key
+  with a different CSR returns a conflict.
 - Rotation marks the previous active certificate `SUPERSEDED`. Revocation updates both the
   identity and its current certificate, including timestamp and reason.
 - PostgreSQL FORCE RLS separates platform manufacturing/bootstrap access from tenant
@@ -49,3 +52,11 @@ The `local-pkcs12` signing adapter exists only for private development environme
 Production must supply `CertificateSigningPort` from HSM/KMS-backed infrastructure. The
 default deployment keeps signing disabled so it cannot silently fall back to a filesystem
 private key.
+
+## v1.0 limitations
+
+The v1.0 revocation state is enforced by the Octopus EMQX HTTP authorizer, but CRL/OCSP
+publication, automated renewal, HSM/KMS signing, append-only CA audit evidence, and
+revocation fan-out/cache invalidation are not yet implemented. These are release gates for
+the planned 1.1 production-PKI increment; do not present the local PKCS#12 mode as a
+production trust service.

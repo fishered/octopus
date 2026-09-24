@@ -11,13 +11,23 @@ Required keys include:
 - `OCTOPUS_REDIS_PASSWORD`
 - `OCTOPUS_INFLUX_TOKEN`
 - `OCTOPUS_JWT_ISSUER`, `OCTOPUS_JWT_KEY_ID`
-- `OCTOPUS_JWT_PUBLIC_KEY`, `OCTOPUS_JWT_PRIVATE_KEY` (mounted PEM resource paths)
 - `OCTOPUS_REFRESH_TOKEN_HMAC_KEY` (base64, at least 256 bits)
 - `OCTOPUS_TOTP_AES_KEY` (base64, exactly 256 bits; replace with KMS adapter in production)
 - `OCTOPUS_MQTT_KEY_STORE_PASSWORD`, `OCTOPUS_MQTT_TRUST_STORE_PASSWORD` when MQTT mTLS is enabled
 - `OCTOPUS_CA_PG_URL`, `OCTOPUS_CA_PG_USERNAME`, `OCTOPUS_CA_PG_PASSWORD`
 - `OCTOPUS_CA_BOOTSTRAP_HMAC_KEY` (base64, at least 256 bits)
+- `OCTOPUS_CA_EMQX_WEBHOOK_API_KEY` (high-entropy shared key used only by the broker webhook)
 - `OCTOPUS_CA_SIGNING_KEY_STORE_PASSWORD` and `OCTOPUS_CA_SIGNING_KEY_ALIAS` for the local PKCS#12 adapter
+
+Create a separate `octopus-jwt` Secret containing `public.pem` and `private.pem`; the
+management deployment mounts it read-only at `/run/secrets/octopus-jwt`. The private key
+must not be placed in `octopus-secrets` as an environment variable. For example:
+
+```bash
+kubectl -n octopus create secret generic octopus-jwt \
+  --from-file=public.pem=/secure/path/public.pem \
+  --from-file=private.pem=/secure/path/private.pem
+```
 
 The base selects S3 object storage. Each environment overlay must replace
 `OCTOPUS_STORAGE_S3_BUCKET` and `OCTOPUS_STORAGE_S3_REGION` with provisioned values. The
@@ -42,6 +52,9 @@ its hostname as the persistent MQTT client ID.
 `octopus-control` is therefore deployed as a StatefulSet with a headless governing Service;
 the stable ordinal keeps the broker session/client ID recoverable after pod recreation.
 During scale-down it unsubscribes first, drains Kafka handoffs, and only then disconnects.
+Configure EMQX mutual TLS and the fail-closed HTTP authorizer described in
+[EMQX broker integration](../../docs/emqx-broker-integration.md); keep the webhook on a
+private network and ensure the broker's unmatched policy is `deny`.
 
 The base keeps `OCTOPUS_CA_SIGNING_MODE=disabled`. For private development environments,
 mount `issuing-ca.p12` from the optional `octopus-ca-signing` Secret and set the mode to

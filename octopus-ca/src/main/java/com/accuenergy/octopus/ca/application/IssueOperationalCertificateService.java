@@ -31,19 +31,28 @@ public final class IssueOperationalCertificateService {
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 200) {
             throw new IllegalArgumentException("idempotencyKey is invalid");
         }
+        String csrFingerprint = sha256(csr);
         var existing = identities.findIssuedByIdempotency(tenantId, identityId, idempotencyKey);
-        if (existing.isPresent()) return existing.orElseThrow();
+        if (existing.isPresent()) {
+            var prior = existing.orElseThrow();
+            if (!csrFingerprint.equals(prior.csrFingerprint())) {
+                throw new IllegalStateException("Idempotency-Key was already used with a different CSR");
+            }
+            return prior.certificate();
+        }
         if (!proofOfPossession.verify(csr)) throw new SecurityException("CSR proof of possession failed");
         var identity = identities.findForTenant(tenantId, identityId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown identity"));
         identity.tenantId().orElseThrow(() -> new IllegalStateException("Identity is not claimed"));
+        UUID deviceId = identity.deviceId().orElseThrow(() -> new IllegalStateException("Identity has no device binding"));
         var now = clock.instant();
         var request = new CertificateSigningPort.SigningRequest(csr,
-                List.of("urn:octopus:tenant:" + tenantId, "urn:octopus:device-identity:" + identityId),
+                List.of("urn:octopus:tenant:" + tenantId, "urn:octopus:device:" + deviceId,
+                        "urn:octopus:device-identity:" + identityId),
                 now.minusSeconds(60), now.plus(lifetime), "device-operational-v1");
         var certificate = signing.sign(request);
         identity.activate(certificate.serialNumber(), certificate.notAfter(), now);
-        identities.saveIssued(identity, certificate, idempotencyKey, sha256(csr), now);
+        identities.saveIssued(identity, certificate, idempotencyKey, csrFingerprint, now);
         return certificate;
     }
 

@@ -55,7 +55,7 @@ public final class DeviceCertificateController {
     @PostMapping("/identities/{identityId}/claim")
     @PreAuthorize("hasAuthority('PERM_ca:claim') or hasAuthority('PERM_platform:all')")
     public IdentityResponse claim(@PathVariable UUID identityId, @Valid @RequestBody ClaimRequest request) {
-        return identity(claiming.claim(identityId, tenantId(), request.bootstrapToken()));
+        return identity(claiming.claim(identityId, tenantId(), request.deviceId(), request.bootstrapToken()));
     }
 
     @PostMapping("/identities/{identityId}/certificates")
@@ -91,6 +91,7 @@ public final class DeviceCertificateController {
     private static IdentityResponse identity(DeviceIdentity value) {
         return new IdentityResponse(value.identityId(), value.hardwareSerial(), value.manufacturer(),
                 value.modelCode(), value.batchCode(), value.status(), value.tenantId().orElse(null),
+                value.deviceId().orElse(null),
                 value.operationalCertificateSerial().orElse(null), value.certificateExpiresAt().orElse(null),
                 value.claimedAt().orElse(null), value.version(), value.createdAt(), value.updatedAt());
     }
@@ -99,7 +100,7 @@ public final class DeviceCertificateController {
                                      @NotBlank String modelCode, @NotBlank String batchCode,
                                      @NotBlank String bootstrapPublicKeyFingerprint,
                                      @Positive @Max(2592000) long bootstrapLifetimeSeconds) { }
-    public record ClaimRequest(@NotBlank String bootstrapToken) { }
+    public record ClaimRequest(@NotNull UUID deviceId, @NotBlank String bootstrapToken) { }
     public record IssueCertificateRequest(@NotBlank String csrBase64,
                                           @Positive @Max(7776000) long lifetimeSeconds) { }
     public record RevokeRequest(@NotBlank String reason) { }
@@ -109,7 +110,7 @@ public final class DeviceCertificateController {
                                       Instant notBefore, Instant notAfter) { }
     public record IdentityResponse(UUID identityId, String hardwareSerial, String manufacturer,
                                    String modelCode, String batchCode, DeviceIdentity.Status status,
-                                   UUID tenantId, String operationalCertificateSerial,
+                                   UUID tenantId, UUID deviceId, String operationalCertificateSerial,
                                    Instant certificateExpiresAt, Instant claimedAt, long version,
                                    Instant createdAt, Instant updatedAt) { }
 }

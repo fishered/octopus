@@ -19,6 +19,8 @@ octopus:
       key-store: ${OCTOPUS_CA_SIGNING_KEY_STORE:}
       key-store-password: ${OCTOPUS_CA_SIGNING_KEY_STORE_PASSWORD:}
       key-alias: ${OCTOPUS_CA_SIGNING_KEY_ALIAS:octopus-issuing-ca}
+    emqx:
+      webhook-api-key: ${OCTOPUS_CA_EMQX_WEBHOOK_API_KEY:}
   security:
     jwt:
       issuer: ${OCTOPUS_JWT_ISSUER:http://localhost:8080}

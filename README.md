@@ -3,6 +3,9 @@
 Octopus is a global, multi-tenant IoT platform for device identity, telemetry collection,
 remote control, energy metering, operations, analytics, and future agent capabilities.
 
+The current supported baseline is **v1.0.0**. See [the changelog](CHANGELOG.md) for release
+scope and known operational boundaries.
+
 ## Modules
 
 ```text
@@ -77,5 +80,6 @@ Render the Kubernetes base with `kubectl kustomize deploy/k8s/base`. See
 - [Device command lifecycle and reliability](docs/device-command-lifecycle.md)
 - [Device presence and reported shadow](docs/device-presence-and-shadow.md)
 - [Device certificate lifecycle](docs/device-certificate-lifecycle.md)
+- [EMQX broker integration](docs/emqx-broker-integration.md)
 - [Architecture decisions](docs/adr/README.md)
 - [IoT plugin architecture](docs/iot-plugin-architecture.md)

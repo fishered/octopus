@@ -56,8 +56,8 @@ octopus:
     jwt:
       issuer: ${OCTOPUS_JWT_ISSUER:http://localhost:8080}
       key-id: ${OCTOPUS_JWT_KEY_ID:octopus-local-1}
-      public-key: ${OCTOPUS_JWT_PUBLIC_KEY:file:/run/secrets/octopus-jwt-public.pem}
-      private-key: ${OCTOPUS_JWT_PRIVATE_KEY:file:/run/secrets/octopus-jwt-private.pem}
+      public-key: ${OCTOPUS_JWT_PUBLIC_KEY:file:/run/secrets/octopus-jwt/public.pem}
+      private-key: ${OCTOPUS_JWT_PRIVATE_KEY:file:/run/secrets/octopus-jwt/private.pem}
       access-lifetime: ${OCTOPUS_ACCESS_TOKEN_LIFETIME:PT10M}
     refresh-token-hmac-key: ${OCTOPUS_REFRESH_TOKEN_HMAC_KEY:}
     totp-aes-key: ${OCTOPUS_TOTP_AES_KEY:}

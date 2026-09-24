@@ -8,6 +8,7 @@ import com.accuenergy.octopus.ca.application.IssueOperationalCertificateService;
 import com.accuenergy.octopus.ca.application.ManufactureDeviceIdentityService;
 import com.accuenergy.octopus.ca.application.ProofOfPossessionPort;
 import com.accuenergy.octopus.ca.application.RevokeDeviceIdentityService;
+import com.accuenergy.octopus.ca.application.EmqxAuthorizationService;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -38,6 +39,11 @@ public class CaApplicationConfiguration {
     @Bean
     RevokeDeviceIdentityService revokeDeviceIdentityService(DeviceIdentityRepository identities, Clock clock) {
         return new RevokeDeviceIdentityService(identities, clock);
+    }
+
+    @Bean
+    EmqxAuthorizationService emqxAuthorizationService(DeviceIdentityRepository identities, Clock clock) {
+        return new EmqxAuthorizationService(identities, clock);
     }
 
     @Bean

@@ -16,11 +16,14 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +32,8 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "octopus.mqtt", name = "enabled", havingValue = "true")
 public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, org.springframework.context.SmartLifecycle,
         MqttCallbackExtended {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PahoDeviceMessagingAdapter.class);
+    private static final long DRAIN_TIMEOUT_MILLIS = 30_000;
     private final MqttAsyncClient client;
     private final Clock clock;
     private final ObjectMapper objectMapper;
@@ -38,6 +43,9 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
     private final String commandResultFilter;
     private final String shadowReportedFilter;
     private final AtomicBoolean running = new AtomicBoolean();
+    private final AtomicInteger inFlight = new AtomicInteger();
+    private final Object drainMonitor = new Object();
+    private volatile InboundMessageHandler inboundHandler;
 
     public PahoDeviceMessagingAdapter(MqttAsyncClient client, Clock clock, ObjectMapper objectMapper,
             MqttConnectOptions connectOptions, InboundMessageDispatcher dispatcher,
@@ -52,6 +60,7 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
         this.topicFilter = topicFilter;
         this.commandResultFilter = commandResultFilter;
         this.shadowReportedFilter = shadowReportedFilter;
+        this.inboundHandler = dispatcher::dispatch;
     }
 
     @Override
@@ -64,6 +73,8 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
     @Override
     public void start(InboundMessageHandler inboundHandler) {
         if (inboundHandler == null) throw new NullPointerException("inboundHandler");
+        this.inboundHandler = inboundHandler;
+        start();
     }
 
     @Override public void start() {
@@ -85,26 +96,39 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
     }
 
     @Override public void messageArrived(String topic, MqttMessage message) {
-        dispatcher.dispatch(new com.accuenergy.octopus.iot.spi.InboundMessage("mqtt", topic,
-                message.getPayload(), message.getQos(), message.isRetained(), clock.instant(), "application/json"))
-                .whenComplete((ignored, failure) -> {
-                    if (failure != null) {
-                        org.slf4j.LoggerFactory.getLogger(getClass()).warn("MQTT inbound handoff failed for {}", topic, failure);
-                        return;
-                    }
-                    try {
-                        if (message.getQos() > 0) client.messageArrivedComplete(message.getId(), message.getQos());
-                    } catch (Exception ackFailure) {
-                        org.slf4j.LoggerFactory.getLogger(getClass()).warn("Unable to ACK MQTT message {}", message.getId(), ackFailure);
-                    }
-                });
+        inFlight.incrementAndGet();
+        CompletionStage<Void> handoff;
+        try {
+            handoff = inboundHandler.onMessage(new com.accuenergy.octopus.iot.spi.InboundMessage("mqtt", topic,
+                    message.getPayload(), message.getQos(), message.isRetained(), clock.instant(), "application/json"));
+            if (handoff == null) throw new IllegalStateException("Inbound handler returned null");
+        } catch (RuntimeException failure) {
+            LOGGER.warn("MQTT inbound handoff failed for {}", topic, failure);
+            handoffComplete();
+            return;
+        }
+        handoff.whenComplete((ignored, failure) -> {
+            try {
+                if (failure != null) {
+                    LOGGER.warn("MQTT inbound handoff failed for {}", topic, failure);
+                    return;
+                }
+                if (message.getQos() > 0) client.messageArrivedComplete(message.getId(), message.getQos());
+            } catch (Exception ackFailure) {
+                LOGGER.warn("Unable to ACK MQTT message {}", message.getId(), ackFailure);
+            } finally {
+                handoffComplete();
+            }
+        });
     }
 
     @Override public void connectComplete(boolean reconnect, String serverUri) {
         if (reconnect && running.get()) try { subscribe(); }
-        catch (Exception failure) { org.slf4j.LoggerFactory.getLogger(getClass()).error("Unable to restore MQTT subscriptions", failure); }
+        catch (Exception failure) { LOGGER.error("Unable to restore MQTT subscriptions", failure); }
     }
-    @Override public void connectionLost(Throwable cause) { }
+    @Override public void connectionLost(Throwable cause) {
+        if (running.get()) LOGGER.warn("MQTT connection lost; automatic reconnect will retry", cause);
+    }
     @Override public void deliveryComplete(IMqttDeliveryToken token) { }
 
     @Override
@@ -158,11 +182,38 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
             if (client.isConnected()) {
                 client.unsubscribe(new String[]{topicFilter, commandResultFilter, shadowReportedFilter})
                         .waitForCompletion(10_000);
+                awaitDrain();
                 client.disconnect(30_000).waitForCompletion(30_000);
             }
             client.close();
         } catch (Exception failure) {
             throw new IllegalStateException("Unable to stop MQTT transport plugin", failure);
+        }
+    }
+
+    private void handoffComplete() {
+        if (inFlight.decrementAndGet() == 0) {
+            synchronized (drainMonitor) { drainMonitor.notifyAll(); }
+        }
+    }
+
+    private void awaitDrain() {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(DRAIN_TIMEOUT_MILLIS);
+        synchronized (drainMonitor) {
+            while (inFlight.get() > 0) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    LOGGER.warn("Stopping MQTT transport with {} inbound handoffs still in flight", inFlight.get());
+                    return;
+                }
+                try {
+                    java.util.concurrent.TimeUnit.NANOSECONDS.timedWait(drainMonitor, remaining);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    LOGGER.warn("Interrupted while draining MQTT inbound handoffs");
+                    return;
+                }
+            }
         }
     }
 

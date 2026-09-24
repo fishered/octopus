@@ -8,12 +8,17 @@ import java.util.UUID;
 public interface DeviceIdentityRepository {
     boolean hardwareSerialExists(String hardwareSerial);
     void create(DeviceIdentity identity, String bootstrapTokenHash, Instant bootstrapExpiresAt);
-    Optional<DeviceIdentity> claim(UUID identityId, String bootstrapTokenHash, UUID tenantId, Instant now);
+    Optional<DeviceIdentity> claim(UUID identityId, String bootstrapTokenHash, UUID tenantId, UUID deviceId,
+                                   Instant now);
     Optional<DeviceIdentity> find(UUID identityId);
     Optional<DeviceIdentity> findForTenant(UUID tenantId, UUID identityId);
-    Optional<CertificateSigningPort.IssuedCertificate> findIssuedByIdempotency(
+    Optional<IssuedCertificateRequest> findIssuedByIdempotency(
             UUID tenantId, UUID identityId, String idempotencyKey);
+    Optional<DeviceCertificateAuthorization> findCertificateAuthorization(String certificateSerial, Instant now);
     void saveIssued(DeviceIdentity identity, CertificateSigningPort.IssuedCertificate certificate,
                     String idempotencyKey, String csrFingerprint, Instant issuedAt);
     void revoke(DeviceIdentity identity, String reason, Instant revokedAt);
+
+    record IssuedCertificateRequest(CertificateSigningPort.IssuedCertificate certificate,
+                                    String csrFingerprint) { }
 }

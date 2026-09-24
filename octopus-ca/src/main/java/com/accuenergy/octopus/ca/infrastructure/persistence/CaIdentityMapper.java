@@ -20,6 +20,8 @@ public interface CaIdentityMapper {
     CertificateRow findIssuedByIdempotency(@Param("tenantId") UUID tenantId,
                                            @Param("identityId") UUID identityId,
                                            @Param("idempotencyKey") String idempotencyKey);
+    CertificateAuthorizationRow findCertificateAuthorization(@Param("certificateSerial") String certificateSerial,
+                                                              @Param("now") Instant now);
     int insertCertificate(@Param("certificate") CertificateRow certificate);
     int supersedeActiveCertificates(@Param("tenantId") UUID tenantId, @Param("identityId") UUID identityId,
                                     @Param("supersededAt") Instant supersededAt);
@@ -30,7 +32,7 @@ public interface CaIdentityMapper {
     int updateRevokedIdentity(@Param("identity") IdentityRow identity,
                               @Param("expectedVersion") long expectedVersion);
 
-    record IdentityRow(UUID identityId, UUID tenantId, String hardwareSerial, String manufacturer,
+    record IdentityRow(UUID identityId, UUID tenantId, UUID deviceId, String hardwareSerial, String manufacturer,
                        String modelCode, String batchCode, String bootstrapPublicKeyFingerprint,
                        String status, String operationalCertificateSerial, Instant certificateExpiresAt,
                        Instant claimedAt, long version, Instant createdAt, Instant updatedAt) { }
@@ -43,4 +45,6 @@ public interface CaIdentityMapper {
             return certificateChain == null ? null : certificateChain.clone();
         }
     }
+
+    record CertificateAuthorizationRow(UUID tenantId, UUID deviceId, String serialNumber, Instant notAfter) { }
 }

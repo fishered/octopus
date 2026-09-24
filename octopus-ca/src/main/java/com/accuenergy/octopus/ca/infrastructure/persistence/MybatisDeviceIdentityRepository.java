@@ -1,6 +1,7 @@
 package com.accuenergy.octopus.ca.infrastructure.persistence;
 
 import com.accuenergy.octopus.ca.application.CertificateSigningPort;
+import com.accuenergy.octopus.ca.application.DeviceCertificateAuthorization;
 import com.accuenergy.octopus.ca.application.DeviceIdentityRepository;
 import com.accuenergy.octopus.ca.domain.DeviceIdentity;
 import java.time.Instant;
@@ -34,11 +35,11 @@ public final class MybatisDeviceIdentityRepository implements DeviceIdentityRepo
     @Override
     @Transactional(transactionManager = "platformTransactionManager")
     public Optional<DeviceIdentity> claim(UUID identityId, String bootstrapTokenHash,
-                                          UUID tenantId, Instant now) {
+                                          UUID tenantId, UUID deviceId, Instant now) {
         CaIdentityMapper.IdentityRow row = mapper.findForUpdate(identityId);
         if (row == null) return Optional.empty();
         DeviceIdentity identity = toDomain(row);
-        identity.claim(tenantId, now);
+        identity.claim(tenantId, deviceId, now);
         if (mapper.consumeBootstrap(identityId, bootstrapTokenHash, now) != 1) return Optional.empty();
         if (mapper.updateClaim(toRow(identity), row.version()) != 1) {
             throw new IllegalStateException("Concurrent device claim detected");
@@ -61,11 +62,21 @@ public final class MybatisDeviceIdentityRepository implements DeviceIdentityRepo
 
     @Override
     @Transactional(transactionManager = "tenantTransactionManager", readOnly = true)
-    public Optional<CertificateSigningPort.IssuedCertificate> findIssuedByIdempotency(
+    public Optional<IssuedCertificateRequest> findIssuedByIdempotency(
             UUID tenantId, UUID identityId, String idempotencyKey) {
         return Optional.ofNullable(mapper.findIssuedByIdempotency(tenantId, identityId, idempotencyKey))
-                .map(row -> new CertificateSigningPort.IssuedCertificate(row.id(), row.serialNumber(),
-                        row.certificateChain(), row.notBefore(), row.notAfter()));
+                .map(row -> new IssuedCertificateRequest(
+                        new CertificateSigningPort.IssuedCertificate(row.id(), row.serialNumber(),
+                                row.certificateChain(), row.notBefore(), row.notAfter()),
+                        row.csrFingerprint()));
+    }
+
+    @Override
+    @Transactional(transactionManager = "platformTransactionManager", readOnly = true)
+    public Optional<DeviceCertificateAuthorization> findCertificateAuthorization(String certificateSerial, Instant now) {
+        return Optional.ofNullable(mapper.findCertificateAuthorization(certificateSerial, now))
+                .map(row -> new DeviceCertificateAuthorization(row.tenantId(), row.deviceId(),
+                        row.serialNumber(), row.notAfter()));
     }
 
     @Override
@@ -96,12 +107,14 @@ public final class MybatisDeviceIdentityRepository implements DeviceIdentityRepo
     private static DeviceIdentity toDomain(CaIdentityMapper.IdentityRow row) {
         return DeviceIdentity.restore(row.identityId(), row.hardwareSerial(), row.manufacturer(),
                 row.modelCode(), row.batchCode(), row.bootstrapPublicKeyFingerprint(),
-                DeviceIdentity.Status.valueOf(row.status()), row.tenantId(), row.operationalCertificateSerial(),
+                DeviceIdentity.Status.valueOf(row.status()), row.tenantId(), row.deviceId(),
+                row.operationalCertificateSerial(),
                 row.certificateExpiresAt(), row.claimedAt(), row.version(), row.createdAt(), row.updatedAt());
     }
 
     private static CaIdentityMapper.IdentityRow toRow(DeviceIdentity identity) {
         return new CaIdentityMapper.IdentityRow(identity.identityId(), identity.tenantId().orElse(null),
+                identity.deviceId().orElse(null),
                 identity.hardwareSerial(), identity.manufacturer(), identity.modelCode(), identity.batchCode(),
                 identity.bootstrapPublicKeyFingerprint(), identity.status().name(),
                 identity.operationalCertificateSerial().orElse(null), identity.certificateExpiresAt().orElse(null),

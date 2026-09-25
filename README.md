@@ -1,5 +1,7 @@
 # Octopus
 
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 Octopus is a global, multi-tenant IoT platform for device identity, telemetry collection,
 remote control, energy metering, operations, analytics, and future agent capabilities.
 
@@ -83,3 +85,7 @@ Render the Kubernetes base with `kubectl kustomize deploy/k8s/base`. See
 - [EMQX broker integration](docs/emqx-broker-integration.md)
 - [Architecture decisions](docs/adr/README.md)
 - [IoT plugin architecture](docs/iot-plugin-architecture.md)
+
+## License
+
+Octopus is licensed under the [Apache License, Version 2.0](LICENSE).

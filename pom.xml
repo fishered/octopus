@@ -11,6 +11,22 @@
 
     <name>Octopus</name>
     <description>Global multi-tenant IoT platform</description>
+    <url>https://github.com/fishered/octopus</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <scm>
+        <connection>scm:git:https://github.com/fishered/octopus.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/fishered/octopus.git</developerConnection>
+        <url>https://github.com/fishered/octopus</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <modules>
         <module>octopus-commons</module>

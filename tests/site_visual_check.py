@@ -39,31 +39,42 @@ with sync_playwright() as playwright:
     page = desktop.new_page()
     collect_errors(page, errors)
     page.goto(BASE_URL, wait_until="networkidle")
-    assert page.title() == "Octopus — Operate every connected device"
-    assert "Connect every device." in page.locator("h1").inner_text()
+
+    assert page.title() == "Octopus — Bring your first AIoT device online"
+    assert "Bring your first device" in page.locator("h1").inner_text()
     assert page.locator("img[src='./octopus-logo.png']").first.is_visible()
+    assert page.locator("#protocol-status").inner_text() == "BUILT IN"
     assert_no_horizontal_overflow(page)
 
-    page.get_by_role("button", name="Dispatch command").click()
-    assert "durable dispatch queue" in page.locator("#console-toast").inner_text()
-    page.get_by_role("button", name="Acknowledge").click()
-    assert page.get_by_role("button", name="Acknowledged").is_disabled()
+    page.get_by_role("button", name="Run connection demo").click()
+    page.wait_for_timeout(1500)
+    assert "Connected" in page.locator("#demo-status").inner_text()
+    assert page.locator(".connection-steps .is-ready").count() == 3
 
-    page.locator("button[data-capability='telemetry']").click()
-    assert page.locator("#capability-title").inner_text() == "Turn noisy messages into dependable telemetry."
-    page.screenshot(path=str(OUTPUT_DIR / "octopus-v2-desktop-en.png"), full_page=True)
+    page.locator("button[data-protocol='http']").click()
+    assert page.locator("#protocol-name").inner_text() == "HTTP / CoAP"
+    assert page.locator("#protocol-status").inner_text() == "PLUGIN CONTRACT"
+    page.get_by_role("button", name="Run connection demo").click()
+    page.wait_for_timeout(1500)
+    assert "Contract ready" in page.locator("#demo-status").inner_text()
+    assert page.locator(".connection-steps .is-planned").count() == 2
+
+    page.get_by_role("button", name="Preview guarded command").click()
+    assert "Preview only" in page.locator("#agent-note").inner_text()
+    page.screenshot(path=str(OUTPUT_DIR / "octopus-aiot-desktop-en.png"), full_page=True)
 
     page.locator("button[data-locale='zh-CN']").click()
     assert page.locator("html").get_attribute("lang") == "zh-CN"
-    assert page.title() == "Octopus — 连接、观察并控制每一台设备"
-    assert "连接每台设备" in page.locator("h1").inner_text()
-    assert page.locator("#capability-title").inner_text() == "把嘈杂消息变成可靠遥测。"
-    page.get_by_role("button", name="下发命令").click()
-    assert "可靠下发队列" in page.locator("#console-toast").inner_text()
+    assert page.title() == "Octopus — 让第一台 AIoT 设备今天上线"
+    assert "让第一台设备" in page.locator("h1").inner_text()
+    assert page.locator("#protocol-status").inner_text() == "插件契约"
+    page.get_by_role("button", name="模拟接入").click()
+    page.wait_for_timeout(1500)
+    assert "插件契约已就绪" in page.locator("#demo-status").inner_text()
     page.reload(wait_until="networkidle")
     assert page.locator("html").get_attribute("lang") == "zh-CN"
     assert_no_horizontal_overflow(page)
-    page.screenshot(path=str(OUTPUT_DIR / "octopus-v2-desktop-zh.png"), full_page=True)
+    page.screenshot(path=str(OUTPUT_DIR / "octopus-aiot-desktop-zh.png"), full_page=True)
     desktop.close()
 
     mobile = browser.new_context(
@@ -75,19 +86,21 @@ with sync_playwright() as playwright:
     collect_errors(page, errors)
     page.goto(BASE_URL, wait_until="networkidle")
     assert page.locator("html").get_attribute("lang") == "zh-CN"
-    assert "连接每台设备" in page.locator("h1").inner_text()
-    assert page.get_by_role("button", name="下发命令").is_visible()
+    assert "让第一台设备" in page.locator("h1").inner_text()
+    assert page.get_by_role("button", name="模拟接入").is_visible()
     assert_no_horizontal_overflow(page)
-    page.locator("button[data-capability='alarms']").click()
-    assert page.locator("#capability-title").inner_text() == "让异常真正触发行动。"
+
+    page.locator("button[data-protocol='fieldbus']").click()
+    assert page.locator("#protocol-name").inner_text() == "Modbus / OPC UA / BACnet"
+    assert page.locator("#protocol-status").inner_text() == "边缘插件模式"
     page.locator("button[data-locale='en']").click()
     assert page.locator("html").get_attribute("lang") == "en"
-    assert "Connect every device." in page.locator("h1").inner_text()
+    assert "Bring your first device" in page.locator("h1").inner_text()
     page.locator("button[data-locale='zh-CN']").click()
-    page.screenshot(path=str(OUTPUT_DIR / "octopus-v2-mobile-zh.png"), full_page=True)
+    page.screenshot(path=str(OUTPUT_DIR / "octopus-aiot-mobile-zh.png"), full_page=True)
     mobile.close()
 
     browser.close()
     assert not errors, "browser errors:\n" + "\n".join(errors)
 
-print(f"v2 visual checks passed; screenshots: {OUTPUT_DIR}")
+print(f"AIoT redesign checks passed; screenshots: {OUTPUT_DIR}")

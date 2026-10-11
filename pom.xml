@@ -32,6 +32,7 @@
         <module>octopus-commons</module>
         <module>octopus-api</module>
         <module>octopus-iot-spi</module>
+        <module>octopus-ai-spi</module>
         <module>octopus-ca</module>
         <module>octopus-collect</module>
         <module>octopus-control</module>
@@ -159,6 +160,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>octopus-iot-spi</artifactId>
+                <version>${octopus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>octopus-ai-spi</artifactId>
                 <version>${octopus.version}</version>
             </dependency>
         </dependencies>

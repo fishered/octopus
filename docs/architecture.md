@@ -8,7 +8,12 @@
 | `octopus-control` | MQTT connectivity, device shadow, durable command execution lifecycle, protocol/AWS IoT adapters | user authorization, telemetry history and analytics |
 | `octopus-collect` | Kafka ingestion, validation, de-duplication, ordering, meter calculations, Influx writes | asset catalog source of truth |
 | `octopus-mgmt` | IAM, tenant/org, facilities, device registry, models, parameters, units, meters, alarms, dashboards | direct MQTT sessions |
-| `octopus-agent` | future agent tools, policy, runs, and audit | direct unrestricted database access |
+| `octopus-agent` | advisory AI integration workflows, provider routing, future policy/runs/audit | direct unrestricted database access or command bypass |
+
+Provider-neutral extension contracts live outside the service boundaries:
+
+- `octopus-iot-spi` defines transport plugins, protocol codecs, deterministic lifecycle, and routing.
+- `octopus-ai-spi` defines advisory AI providers, capabilities, structured requests, and response checks.
 
 `octopus-mgmt` publishes compact reference-data snapshots/changes. Collectors do not
 query PostgreSQL per measurement; they maintain a versioned local/Redis cache and reject

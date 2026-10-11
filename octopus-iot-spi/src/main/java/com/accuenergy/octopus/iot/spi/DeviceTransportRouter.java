@@ -4,25 +4,35 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-/** Selects a device-bound plugin, falling back to the configured platform plugin. */
+/** Selects the active transport and codec explicitly bound to a device. */
 public final class DeviceTransportRouter {
     private final DeviceTransportPluginRegistry registry;
     private final DeviceBindingResolver bindings;
     private final ProtocolCodecRegistry codecs;
-    private final String defaultPluginId;
 
-    public DeviceTransportRouter(DeviceTransportPluginRegistry registry, DeviceBindingResolver bindings,
-            String defaultPluginId) {
-        this(registry, bindings, new ProtocolCodecRegistry(java.util.List.of(new PassthroughJsonCodec())), defaultPluginId);
+    public DeviceTransportRouter(DeviceTransportPluginRegistry registry, DeviceBindingResolver bindings) {
+        this(registry, bindings, new ProtocolCodecRegistry(java.util.List.of(new PassthroughJsonCodec())));
     }
 
     public DeviceTransportRouter(DeviceTransportPluginRegistry registry, DeviceBindingResolver bindings,
-            ProtocolCodecRegistry codecs, String defaultPluginId) {
+            ProtocolCodecRegistry codecs) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.codecs = Objects.requireNonNull(codecs, "codecs");
-        if (defaultPluginId == null || defaultPluginId.isBlank()) throw new IllegalArgumentException("defaultPluginId is required");
-        this.defaultPluginId = defaultPluginId.strip();
+    }
+
+    /** @deprecated Device bindings are fail-closed; no default plugin fallback is used. */
+    @Deprecated(forRemoval = true)
+    public DeviceTransportRouter(DeviceTransportPluginRegistry registry, DeviceBindingResolver bindings,
+            String ignoredDefaultPluginId) {
+        this(registry, bindings);
+    }
+
+    /** @deprecated Device bindings are fail-closed; no default plugin fallback is used. */
+    @Deprecated(forRemoval = true)
+    public DeviceTransportRouter(DeviceTransportPluginRegistry registry, DeviceBindingResolver bindings,
+            ProtocolCodecRegistry codecs, String ignoredDefaultPluginId) {
+        this(registry, bindings, codecs);
     }
 
     public CompletionStage<PublishReceipt> publish(OutboundMessage message) {

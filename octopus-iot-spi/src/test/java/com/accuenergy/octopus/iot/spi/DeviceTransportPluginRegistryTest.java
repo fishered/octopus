@@ -20,6 +20,18 @@ class DeviceTransportPluginRegistryTest {
     }
 
     @Test
+    void rejectsPluginsBuiltForAnotherSpiVersion() {
+        DeviceTransportPlugin incompatible = new RecordingPlugin("future-plugin") {
+            @Override public PluginDescriptor descriptor() {
+                return new PluginDescriptor("future-plugin", "1.0.0", PluginDescriptor.CURRENT_SPI_VERSION + 1,
+                        Set.of(MessageKind.COMMAND), "{}");
+            }
+        };
+        assertThrows(IllegalArgumentException.class,
+                () -> new DeviceTransportPluginRegistry(List.of(incompatible)));
+    }
+
+    @Test
     void routesToDeviceBindingAndRejectsUnsupportedKinds() {
         RecordingPlugin plugin = plugin("mqtt-json");
         var tenant = UUID.randomUUID();
@@ -33,7 +45,7 @@ class DeviceTransportPluginRegistryTest {
         };
         var router = new DeviceTransportRouter(new DeviceTransportPluginRegistry(List.of(plugin)),
                 (t, d) -> java.util.Optional.of(new DeviceBinding(t, d, "mqtt-json", "json", 1)),
-                new ProtocolCodecRegistry(List.of(codec)), "mqtt-json");
+                new ProtocolCodecRegistry(List.of(codec)));
         var message = new OutboundMessage(MessageKind.COMMAND, tenant, device, UUID.randomUUID(), "switch",
                 new byte[] {1}, Instant.now(), Instant.now().plusSeconds(30), "application/json");
         assertEquals(PublishReceipt.Status.ACCEPTED, router.publish(message).toCompletableFuture().join().status());
@@ -52,12 +64,12 @@ class DeviceTransportPluginRegistryTest {
         var message = new OutboundMessage(MessageKind.COMMAND, tenant, device, UUID.randomUUID(), "switch",
                 new byte[] {1}, Instant.now(), Instant.now().plusSeconds(30), "application/json");
         var registry = new DeviceTransportPluginRegistry(List.of(plugin));
-        var missing = new DeviceTransportRouter(registry, (t, d) -> java.util.Optional.empty(), "mqtt-json");
+        var missing = new DeviceTransportRouter(registry, (t, d) -> java.util.Optional.empty());
         assertThrows(java.util.concurrent.CompletionException.class,
                 () -> missing.publish(message).toCompletableFuture().join());
         var disabled = new DeviceTransportRouter(registry,
                 (t, d) -> java.util.Optional.of(new DeviceBinding(t, d, "mqtt-json", "json",
-                        DeviceBinding.Status.DISABLED, 1)), "mqtt-json");
+                        DeviceBinding.Status.DISABLED, 1)));
         assertThrows(java.util.concurrent.CompletionException.class,
                 () -> disabled.publish(message).toCompletableFuture().join());
     }
@@ -66,7 +78,7 @@ class DeviceTransportPluginRegistryTest {
         return new RecordingPlugin(id);
     }
 
-    private static final class RecordingPlugin implements DeviceTransportPlugin {
+    private static class RecordingPlugin implements DeviceTransportPlugin {
         private final PluginDescriptor descriptor;
         private byte[] publishedPayload;
 

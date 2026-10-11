@@ -30,15 +30,13 @@ import org.springframework.stereotype.Component;
 /** MQTT 3.1.1 command adapter. AWS IoT implements the same application port. */
 @Component
 @ConditionalOnProperty(prefix = "octopus.mqtt", name = "enabled", havingValue = "true")
-public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, org.springframework.context.SmartLifecycle,
-        MqttCallbackExtended {
+public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, MqttCallbackExtended {
     private static final Logger LOGGER = LoggerFactory.getLogger(PahoDeviceMessagingAdapter.class);
     private static final long DRAIN_TIMEOUT_MILLIS = 30_000;
     private final MqttAsyncClient client;
     private final Clock clock;
     private final ObjectMapper objectMapper;
     private final MqttConnectOptions connectOptions;
-    private final InboundMessageDispatcher dispatcher;
     private final String topicFilter;
     private final String commandResultFilter;
     private final String shadowReportedFilter;
@@ -48,7 +46,7 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
     private volatile InboundMessageHandler inboundHandler;
 
     public PahoDeviceMessagingAdapter(MqttAsyncClient client, Clock clock, ObjectMapper objectMapper,
-            MqttConnectOptions connectOptions, InboundMessageDispatcher dispatcher,
+            MqttConnectOptions connectOptions,
             @org.springframework.beans.factory.annotation.Value("${octopus.mqtt.topic-filter}") String topicFilter,
             @org.springframework.beans.factory.annotation.Value("${octopus.mqtt.command-result-topic-filter}") String commandResultFilter,
             @org.springframework.beans.factory.annotation.Value("${octopus.mqtt.shadow-reported-topic-filter}") String shadowReportedFilter) {
@@ -56,11 +54,11 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
         this.clock = clock;
         this.objectMapper = objectMapper;
         this.connectOptions = connectOptions;
-        this.dispatcher = dispatcher;
         this.topicFilter = topicFilter;
         this.commandResultFilter = commandResultFilter;
         this.shadowReportedFilter = shadowReportedFilter;
-        this.inboundHandler = dispatcher::dispatch;
+        this.inboundHandler = message -> CompletableFuture.failedFuture(
+                new IllegalStateException("MQTT plugin has not been started by the plugin runtime"));
     }
 
     @Override
@@ -74,10 +72,6 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
     public void start(InboundMessageHandler inboundHandler) {
         if (inboundHandler == null) throw new NullPointerException("inboundHandler");
         this.inboundHandler = inboundHandler;
-        start();
-    }
-
-    @Override public void start() {
         if (!running.compareAndSet(false, true)) return;
         try {
             client.setCallback(this);
@@ -99,7 +93,7 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
         inFlight.incrementAndGet();
         CompletionStage<Void> handoff;
         try {
-            handoff = inboundHandler.onMessage(new com.accuenergy.octopus.iot.spi.InboundMessage("mqtt", topic,
+            handoff = inboundHandler.onMessage(new com.accuenergy.octopus.iot.spi.InboundMessage("mqtt-json", topic,
                     message.getPayload(), message.getQos(), message.isRetained(), clock.instant(), "application/json"));
             if (handoff == null) throw new IllegalStateException("Inbound handler returned null");
         } catch (RuntimeException failure) {
@@ -217,7 +211,5 @@ public final class PahoDeviceMessagingAdapter implements DeviceTransportPlugin, 
         }
     }
 
-    @Override public boolean isRunning() { return running.get(); }
-    @Override public boolean isAutoStartup() { return true; }
-    @Override public int getPhase() { return 0; }
+    public boolean isRunning() { return running.get(); }
 }

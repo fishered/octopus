@@ -14,7 +14,7 @@ public final class DeviceTransportPluginRegistry {
     public DeviceTransportPluginRegistry(List<? extends DeviceTransportPlugin> plugins) {
         Objects.requireNonNull(plugins, "plugins");
         this.plugins = plugins.stream().collect(Collectors.toUnmodifiableMap(
-                plugin -> Objects.requireNonNull(plugin, "plugin").descriptor().pluginId(),
+                plugin -> validate(Objects.requireNonNull(plugin, "plugin")),
                 Function.identity(),
                 (left, right) -> { throw new IllegalArgumentException("Duplicate IoT plugin: " + left.descriptor().pluginId()); }));
     }
@@ -33,4 +33,13 @@ public final class DeviceTransportPluginRegistry {
     }
 
     public List<DeviceTransportPlugin> all() { return List.copyOf(plugins.values()); }
+
+    private static String validate(DeviceTransportPlugin plugin) {
+        PluginDescriptor descriptor = Objects.requireNonNull(plugin.descriptor(), "plugin descriptor");
+        if (descriptor.spiVersion() != PluginDescriptor.CURRENT_SPI_VERSION) {
+            throw new IllegalArgumentException("Unsupported IoT plugin SPI version " + descriptor.spiVersion()
+                    + " for " + descriptor.pluginId() + "; expected " + PluginDescriptor.CURRENT_SPI_VERSION);
+        }
+        return descriptor.pluginId();
+    }
 }

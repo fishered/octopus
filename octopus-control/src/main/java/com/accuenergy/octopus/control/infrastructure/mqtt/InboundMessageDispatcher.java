@@ -7,6 +7,7 @@ import com.accuenergy.octopus.iot.spi.InboundMessage;
 import com.accuenergy.octopus.iot.spi.MessageKind;
 import com.accuenergy.octopus.iot.spi.ProtocolCodec;
 import com.accuenergy.octopus.iot.spi.ProtocolCodecRegistry;
+import com.accuenergy.octopus.iot.spi.DeviceTransportPluginRegistry;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -16,13 +17,16 @@ import org.springframework.stereotype.Component;
 @Component
 public final class InboundMessageDispatcher {
     private final ProtocolCodecRegistry codecs;
+    private final DeviceTransportPluginRegistry plugins;
     private final TelemetryIngressService telemetry;
     private final DeviceShadowIngressService shadows;
     private final PahoCommandResultHandler commandResults;
 
-    public InboundMessageDispatcher(ProtocolCodecRegistry codecs, TelemetryIngressService telemetry,
-            DeviceShadowIngressService shadows, PahoCommandResultHandler commandResults) {
+    public InboundMessageDispatcher(ProtocolCodecRegistry codecs, DeviceTransportPluginRegistry plugins,
+            TelemetryIngressService telemetry, DeviceShadowIngressService shadows,
+            PahoCommandResultHandler commandResults) {
         this.codecs = codecs;
+        this.plugins = plugins;
         this.telemetry = telemetry;
         this.shadows = shadows;
         this.commandResults = commandResults;
@@ -30,10 +34,8 @@ public final class InboundMessageDispatcher {
 
     public CompletionStage<Void> dispatch(InboundMessage message) {
         MessageKind kind = kind(message.topic());
-        ProtocolCodec codec = codecs.require("json");
-        if (!codec.supports(message, kind)) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("No codec supports inbound MQTT message"));
-        }
+        var plugin = plugins.require(message.transport());
+        ProtocolCodec codec = codecs.select(message, kind, plugin.descriptor().codecIds());
         codec.decode(message, kind);
         if (kind == MessageKind.COMMAND_RESULT) {
             try {

@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 Octopus is a global, multi-tenant IoT platform for device identity, telemetry collection,
-remote control, energy metering, operations, analytics, and future agent capabilities.
+remote control, energy metering, operations, analytics, and advisory AI capabilities.
 
 The current supported baseline is **v1.0.0**. See [the changelog](CHANGELOG.md) for release
 scope and known operational boundaries.
@@ -18,8 +18,9 @@ octopus
 +-- octopus-collect      # Ordered, replayable telemetry processing and calculations
 +-- octopus-control      # MQTT device connectivity, command, shadow, and AWS IoT adapters
 +-- octopus-iot-spi      # Provider-neutral transport and protocol plugin contracts
++-- octopus-ai-spi       # Provider-neutral AI model plugin contracts and routing
 +-- octopus-mgmt         # IAM, organizations, assets, alarms, analytics, and dashboards
-`-- octopus-agent        # Reserved agent capability boundary
+`-- octopus-agent        # Advisory AI workflows; never bypasses domain authorization
 ```
 
 Each deployable service uses the package dependency direction below:
@@ -82,9 +83,11 @@ Render the Kubernetes base with `kubectl kustomize deploy/k8s/base`. See
 - [Device command lifecycle and reliability](docs/device-command-lifecycle.md)
 - [Device presence and reported shadow](docs/device-presence-and-shadow.md)
 - [Device certificate lifecycle](docs/device-certificate-lifecycle.md)
+- [Device onboarding](docs/device-onboarding.md)
 - [EMQX broker integration](docs/emqx-broker-integration.md)
 - [Architecture decisions](docs/adr/README.md)
 - [IoT plugin architecture](docs/iot-plugin-architecture.md)
+- [AI extension architecture](docs/ai-extension-architecture.md)
 
 ## License
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Add a deterministic IoT plugin runtime with startup rollback, reverse-order shutdown,
+  SPI compatibility checks, codec allow-list selection, and actuator health details.
+- Add the provider-neutral `octopus-ai-spi` module and the first review-only device
+  integration assistant boundary in `octopus-agent`.
+- Add an opt-in OpenAI-compatible HTTP provider with model allow-listing, structured output,
+  bounded timeouts, sanitized failures, and local proposal validation.
+- Remove the hard-coded inbound JSON codec path so installed transport plugins can declare
+  and select JSON, Protobuf, or vendor codecs without changing control-domain code.
+- Add an atomic one-call device onboarding use case for logical device, physical hardware,
+  and active connector binding creation.
+- Make one-call device onboarding durably idempotent and concurrency-safe through the required
+  `Idempotency-Key` header.
+
 ## 1.0.0 - 2026-09-25
 
 Octopus 1.0 establishes the first supported platform baseline for multi-tenant device

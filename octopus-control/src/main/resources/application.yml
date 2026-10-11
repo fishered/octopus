@@ -37,8 +37,6 @@ spring:
       password: ${OCTOPUS_REDIS_PASSWORD:}
 octopus:
   environment: ${OCTOPUS_ENVIRONMENT:local}
-  iot:
-    default-plugin: ${OCTOPUS_IOT_DEFAULT_PLUGIN:mqtt-json}
   kafka:
     telemetry-raw-topic: ${OCTOPUS_TELEMETRY_RAW_TOPIC:octopus.local.telemetry.raw.v1}
     telemetry-quarantine-topic: ${OCTOPUS_TELEMETRY_QUARANTINE_TOPIC:octopus.local.telemetry.quarantine.v1}

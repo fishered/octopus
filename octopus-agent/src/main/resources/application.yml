@@ -1,3 +1,17 @@
-spring.application.name: octopus-agent
+spring:
+  application:
+    name: octopus-agent
+octopus:
+  ai:
+    default-provider: ${OCTOPUS_AI_DEFAULT_PROVIDER:disabled}
+    integration-model: ${OCTOPUS_AI_INTEGRATION_MODEL:disabled}
+    openai-compatible:
+      enabled: ${OCTOPUS_AI_OPENAI_COMPATIBLE_ENABLED:false}
+      provider-id: ${OCTOPUS_AI_OPENAI_COMPATIBLE_PROVIDER_ID:openai-compatible}
+      base-url: ${OCTOPUS_AI_OPENAI_COMPATIBLE_BASE_URL:https://api.openai.com/v1}
+      api-key: ${OCTOPUS_AI_OPENAI_COMPATIBLE_API_KEY:}
+      models: ${OCTOPUS_AI_OPENAI_COMPATIBLE_MODELS:gpt-5-mini}
+      chat-completions-path: ${OCTOPUS_AI_OPENAI_COMPATIBLE_CHAT_PATH:/chat/completions}
+      timeout: ${OCTOPUS_AI_OPENAI_COMPATIBLE_TIMEOUT:PT30S}
 server.shutdown: graceful
 management.endpoint.health.probes.enabled: true

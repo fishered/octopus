@@ -6,6 +6,8 @@ import java.util.Objects;
 /** Immutable metadata used to validate and route an installed plugin. */
 public record PluginDescriptor(String pluginId, String version, int spiVersion,
         Set<MessageKind> messageKinds, Set<String> codecIds, String configurationSchema) {
+    public static final int CURRENT_SPI_VERSION = 1;
+
     public PluginDescriptor(String pluginId, String version, int spiVersion,
             Set<MessageKind> messageKinds, String configurationSchema) {
         this(pluginId, version, spiVersion, messageKinds, Set.of("json"), configurationSchema);

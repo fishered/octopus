@@ -22,18 +22,23 @@ public final class DeviceManagementService {
 
     public Device register(AuthenticatedPrincipal principal, RegisterDevice command) {
         TenantId tenantId = currentTenant();
-        String path = devices.findOrganizationPath(command.organizationId())
-                .orElseThrow(() -> new IllegalArgumentException("Unknown organization"));
-        if (!authorization.isAllowed(principal, "device:create", ResourceAction.CONFIGURE,
-                new ProtectedResource(tenantId, "organization", command.organizationId(), Optional.of(path)))) {
-            throw new DeviceAccessDeniedException();
-        }
+        requireOrganizationPermission(principal, command.organizationId(), "device:create");
         if (devices.existsByCode(command.code())) throw new IllegalArgumentException("Device code already exists");
         Device device = Device.register(UUID.randomUUID(), tenantId.value(), command.organizationId(),
                 command.facilityId(), command.deviceTypeId(), command.thingModelId(), command.modelVersion(),
                 command.code(), command.displayName(), clock.instant());
         devices.insert(device);
         return device;
+    }
+
+    void requireOrganizationPermission(AuthenticatedPrincipal principal, UUID organizationId, String permission) {
+        TenantId tenantId = currentTenant();
+        String path = devices.findOrganizationPath(organizationId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown organization"));
+        if (!authorization.isAllowed(principal, permission, ResourceAction.CONFIGURE,
+                new ProtectedResource(tenantId, "organization", organizationId, Optional.of(path)))) {
+            throw new DeviceAccessDeniedException();
+        }
     }
 
     public Device get(AuthenticatedPrincipal principal, UUID deviceId) {

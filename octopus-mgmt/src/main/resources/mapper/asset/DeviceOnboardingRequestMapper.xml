@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.DeviceOnboardingRequestMapper">
+    <select id="findForUpdate" resultType="com.accuenergy.octopus.mgmt.infrastructure.persistence.asset.DeviceOnboardingRequestMapper$RequestRow">
+        SELECT request_id, request_sha256, status, device_id, actual_id, code, hardware_serial,
+               plugin_id, codec_id, binding_version, device_created_at
+          FROM device_onboarding_request
+         WHERE requested_by = #{requestedBy} AND idempotency_key = #{idempotencyKey}
+         FOR UPDATE
+    </select>
+
+    <insert id="insertClaim">
+        INSERT INTO device_onboarding_request(request_id, tenant_id, requested_by, idempotency_key,
+               request_sha256, status, requested_at)
+        VALUES (#{requestId}, #{tenantId}, #{requestedBy}, #{idempotencyKey},
+                #{requestSha256}, 'PROCESSING', #{requestedAt})
+        ON CONFLICT (tenant_id, requested_by, idempotency_key) DO NOTHING
+    </insert>
+
+    <update id="complete">
+        UPDATE device_onboarding_request
+           SET status = 'COMPLETED', device_id = #{deviceId}, actual_id = #{actualId}, code = #{code},
+               hardware_serial = #{hardwareSerial}, plugin_id = #{pluginId}, codec_id = #{codecId},
+               binding_version = #{bindingVersion}, device_created_at = #{deviceCreatedAt},
+               completed_at = #{completedAt}
+         WHERE request_id = #{requestId} AND status = 'PROCESSING'
+    </update>
+</mapper>

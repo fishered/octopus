@@ -78,6 +78,18 @@ class DeviceIntegrationAssistantTest {
                 .toCompletableFuture().join());
     }
 
+    @Test
+    void rejectsAPluginOutsideTheInstalledCatalog() {
+        AiProviderPlugin provider = new TestProvider("{\"pluginId\":\"invented-plugin\",\"codecId\":\"json\","
+                + "\"thingModel\":{},\"mapping\":{},\"checks\":[\"review\"]}");
+        var assistant = new DeviceIntegrationAssistant(
+                new AiProviderRouter(new AiProviderPluginRegistry(List.of(provider)), "test-ai"),
+                new ObjectMapper(), "integration-model");
+
+        assertThrows(java.util.concurrent.CompletionException.class, () -> assistant.draft(command())
+                .toCompletableFuture().join());
+    }
+
     private static String proposal() {
         return "{\"pluginId\":\"mqtt-json\",\"codecId\":\"json\",\"thingModel\":{},"
                 + "\"mapping\":{},\"checks\":[\"validate sample payload\"]}";

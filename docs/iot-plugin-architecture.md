@@ -72,5 +72,36 @@ Actuator health response. The sanitized entry includes plugin/SPI version, suppo
 and codec IDs so operators can verify onboarding choices without inspecting the runtime classpath.
 Health details must not include credentials, endpoint tokens, or raw device payloads.
 
+## Discovery and onboarding preflight
+
+Authenticated operators can discover the same sanitized runtime catalog through:
+
+```http
+GET /api/v1/iot-plugins
+Authorization: Bearer <tenant-or-platform-token>
+```
+
+The caller needs `iot:plugin:read`, `device:configure`, `platform:all`, or the
+`iot:plugin:read` OAuth scope. Configuration schemas are returned so a UI can render provider
+fields, but schema/default content must never contain credentials.
+
+Before writing a connector binding, clients can fail fast against the live runtime:
+
+```http
+POST /api/v1/iot-plugins/preflight
+Content-Type: application/json
+
+{
+  "pluginId": "mqtt-json",
+  "codecId": "json",
+  "requiredKinds": ["COMMAND", "TELEMETRY"]
+}
+```
+
+The result distinguishes hard errors such as `PLUGIN_NOT_INSTALLED`, `CODEC_NOT_SUPPORTED`,
+`MESSAGE_KIND_NOT_SUPPORTED`, and `PLUGIN_UNAVAILABLE` from transient warnings such as a
+`DEGRADED` or `STARTING` plugin. Preflight is advisory against a point-in-time snapshot; the
+command router still repeats all fail-closed checks when a real message is published.
+
 Plugins with native SDKs or serial protocols (Modbus, OPC-UA, BACnet) should run in an edge
 gateway or sidecar. The in-process SPI is intended for trusted, provider-neutral adapters.

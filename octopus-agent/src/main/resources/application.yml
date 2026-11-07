@@ -2,9 +2,17 @@ spring:
   application:
     name: octopus-agent
 octopus:
+  security:
+    jwt:
+      issuer: ${OCTOPUS_JWT_ISSUER:http://localhost:8080}
+      jwk-set-uri: ${OCTOPUS_JWK_SET_URI:http://localhost:8080/oauth2/jwks}
+      audience: ${OCTOPUS_JWT_AUDIENCE:octopus-api}
   ai:
     default-provider: ${OCTOPUS_AI_DEFAULT_PROVIDER:disabled}
     integration-model: ${OCTOPUS_AI_INTEGRATION_MODEL:disabled}
+    governance:
+      requests-per-minute: ${OCTOPUS_AI_REQUESTS_PER_MINUTE:10}
+      estimated-tokens-per-minute: ${OCTOPUS_AI_ESTIMATED_TOKENS_PER_MINUTE:20000}
     openai-compatible:
       enabled: ${OCTOPUS_AI_OPENAI_COMPATIBLE_ENABLED:false}
       provider-id: ${OCTOPUS_AI_OPENAI_COMPATIBLE_PROVIDER_ID:openai-compatible}

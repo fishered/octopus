@@ -4,12 +4,18 @@ import com.accuenergy.octopus.ai.spi.AiProviderPlugin;
 import com.accuenergy.octopus.ai.spi.AiProviderPluginRegistry;
 import com.accuenergy.octopus.ai.spi.AiProviderRouter;
 import java.util.List;
+import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class AiPluginConfiguration {
+    @Bean
+    Clock aiClock() {
+        return Clock.systemUTC();
+    }
+
     @Bean
     AiProviderPluginRegistry aiProviderPluginRegistry(List<AiProviderPlugin> providers) {
         return new AiProviderPluginRegistry(providers);

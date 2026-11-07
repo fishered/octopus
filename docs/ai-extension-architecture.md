@@ -63,8 +63,46 @@ protocol facts + sample payload
  human/domain validation -> normal authorized APIs
 ```
 
-Before a public AI endpoint is added, it must have tenant-scoped authentication, rate and token
-budgets, prompt/output audit metadata, sensitive-field redaction, schema validation, and explicit
-approval for every mutation. AI output is never evidence that a device integration is valid;
+Every public AI endpoint must have tenant-scoped authentication, rate and token budgets,
+prompt/output audit metadata, sensitive-field redaction, schema validation, and explicit approval
+for every mutation. AI output is never evidence that a device integration is valid;
 the same codec, topic, thing-model, and authorization checks used for manual integrations remain
 authoritative.
+
+## Governed device-integration endpoint
+
+`octopus-agent` exposes the review-only workflow at:
+
+```http
+POST /api/v1/ai/device-integration-drafts
+Authorization: Bearer <tenant-token>
+X-Correlation-Id: <optional UUID>
+Content-Type: application/json
+
+{
+  "vendor": "Acme",
+  "protocol": "MQTT",
+  "samplePayload": "{\"temperature\": 21.4}",
+  "requirements": "Map temperature in Celsius",
+  "installedPlugins": ["mqtt-json"]
+}
+```
+
+The JWT signature, issuer, audience, tenant claim, and `ai:integration:draft` permission/scope are
+checked before dispatch. Platform tokens without a tenant claim are rejected: support tooling must
+obtain an explicitly tenant-scoped token instead of asking the model to infer tenancy.
+
+Common credential fields are redacted recursively from JSON and key/value text before provider
+dispatch. A conservative per-instance minute budget limits request count and estimated input tokens;
+configure it with `OCTOPUS_AI_REQUESTS_PER_MINUTE` and
+`OCTOPUS_AI_ESTIMATED_TOKENS_PER_MINUTE`. Production ingress should additionally enforce a
+distributed/global quota when multiple replicas are used.
+
+`installedPlugins` must contain 1 to 64 valid runtime plugin IDs. The locally validated proposal is
+rejected if the model selects a plugin outside that catalog; callers should populate this field from
+the control service plugin-discovery endpoint and run preflight before applying any reviewed draft.
+
+Every completed or failed run emits a metadata-only `octopus.ai.audit` event containing tenant,
+actor, correlation ID, workflow, outcome, provider/model, token counts, duration, and timestamp.
+Prompts, device payloads, credentials, and model output are deliberately excluded. The response
+always sets `reviewRequired: true`; applying the proposal remains a separate, authorized domain API.

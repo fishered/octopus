@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an authenticated IoT plugin catalog and compatibility preflight API so onboarding clients
+  can reject missing codecs, unsupported message kinds, and unavailable plugins before mutation.
+- Add a tenant-scoped, review-only AI device-integration draft API with JWT permission checks,
+  per-tenant request/token budgets, credential redaction, and payload-free audit events.
+- Add `iot:plugin:read` and `ai:integration:draft` to the managed permission vocabulary.
 - Add a deterministic IoT plugin runtime with startup rollback, reverse-order shutdown,
   SPI compatibility checks, codec allow-list selection, and actuator health details.
 - Add the provider-neutral `octopus-ai-spi` module and the first review-only device

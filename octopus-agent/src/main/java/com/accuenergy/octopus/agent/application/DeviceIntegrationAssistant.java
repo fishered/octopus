@@ -60,10 +60,10 @@ public final class DeviceIntegrationAssistant {
         AiRequest request = new AiRequest(command.tenantId(), command.correlationId(),
                 AiCapability.DEVICE_INTEGRATION, model, INSTRUCTIONS, input, OUTPUT_SCHEMA,
                 Map.of("workflow", "device-integration-draft"));
-        return router.generate(request).thenApply(this::validateOutput);
+        return router.generate(request).thenApply(response -> validateOutput(response, Set.copyOf(command.installedPlugins())));
     }
 
-    private AiResponse validateOutput(AiResponse response) {
+    private AiResponse validateOutput(AiResponse response, Set<String> installedPlugins) {
         if (response.finishReason() != AiResponse.FinishReason.COMPLETED) {
             throw new IllegalStateException("AI integration proposal did not complete successfully");
         }
@@ -83,6 +83,9 @@ public final class DeviceIntegrationAssistant {
             });
             requireToken(object, "pluginId");
             requireToken(object, "codecId");
+            if (!installedPlugins.contains(object.path("pluginId").textValue())) {
+                throw new IllegalArgumentException("AI integration proposal selected a plugin outside the installed catalog");
+            }
             if (!object.path("thingModel").isObject() || !object.path("mapping").isObject()) {
                 throw new IllegalArgumentException("AI integration proposal requires object thingModel and mapping");
             }
@@ -119,6 +122,14 @@ public final class DeviceIntegrationAssistant {
             samplePayload = requireText(samplePayload, "samplePayload", 65_536);
             requirements = requireText(requirements, "requirements", 8_192);
             installedPlugins = installedPlugins == null ? java.util.List.of() : java.util.List.copyOf(installedPlugins);
+            if (installedPlugins.isEmpty() || installedPlugins.size() > 64) {
+                throw new IllegalArgumentException("installedPlugins requires 1 to 64 entries");
+            }
+            installedPlugins.forEach(value -> {
+                if (value == null || !value.matches("[a-z][a-z0-9._-]{0,63}")) {
+                    throw new IllegalArgumentException("installedPlugins contains an invalid plugin ID");
+                }
+            });
         }
 
         private static String requireText(String value, String name, int maxLength) {

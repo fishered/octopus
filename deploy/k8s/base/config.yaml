@@ -41,5 +41,7 @@ data:
   OCTOPUS_MQTT_COMMAND_RESULT_TOPIC_FILTER: $share/octopus-control/octopus/+/devices/+/command-results/+
   OCTOPUS_MQTT_SHADOW_REPORTED_TOPIC_FILTER: $share/octopus-control/octopus/+/devices/+/shadow/reported
   OCTOPUS_JWK_SET_URI: http://octopus-mgmt.octopus.svc.cluster.local/oauth2/jwks
+  OCTOPUS_AI_REQUESTS_PER_MINUTE: "10"
+  OCTOPUS_AI_ESTIMATED_TOKENS_PER_MINUTE: "20000"
   OCTOPUS_CA_SIGNING_MODE: disabled
   OCTOPUS_CA_SIGNING_KEY_STORE: /run/secrets/octopus-ca/issuing-ca.p12
